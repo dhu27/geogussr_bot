@@ -231,6 +231,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "flask" },
+    { name = "huggingface-hub" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "pillow" },
@@ -256,6 +257,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "flask", specifier = ">=3.0" },
+    { name = "huggingface-hub", specifier = ">=0.30" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pillow", specifier = ">=10.3" },

@@ -41,8 +41,15 @@ harness screenshot vs. the canonical training crop.
 
 ## Data
 
-Datasets and weights never go in git (ground rule 3). They live under `datasets/` and `runs/`
-(gitignored), or wherever `GEO_DATA_ROOT` points. The Mapillary token goes in `.env`
-(copy `.env.example`).
+Datasets and weights never go in git (ground rule 3). The team shares them through a private
+Hugging Face dataset repo; locally they live under `datasets/` (gitignored) or wherever
+`GEO_DATA_ROOT` points. Tokens go in `.env` (copy `.env.example`; never put real tokens in it).
+
+```bash
+uv run python scripts/data_hub.py list              # datasets on the hub
+uv run python scripts/data_hub.py pull pilot_v1     # -> datasets/pilot_v1/
+```
+
+Setup, the download path, and the hub layout are in **[docs/DATA.md](docs/DATA.md)**.
 
 Imagery © Mapillary contributors, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).

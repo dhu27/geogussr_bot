@@ -342,7 +342,7 @@ To keep the embedding pass on laptops, cap panoramas per region for the guesser'
 - [ ] Weekly sync day and time.
 - [ ] Final view size (e.g. 336 × 336) and encoder choice (CLIP vs SigLIP), fixed at M0.
 - [ ] Current Mapillary API rate limits for the bulk download.
-- [ ] Shared storage location for data and weights (drive vs Hugging Face Hub).
+- [x] Shared storage location for data and weights: a private Hugging Face dataset repo under a team organization (see `docs/DATA.md`).
 - [ ] GPU access (Colab or Hoffman2) for the one-time embedding pass, if laptops are too slow.
 
 ## 15. References
