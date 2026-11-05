@@ -13,6 +13,7 @@ dependencies = [
     "requests>=2.32",
     "flask>=3.0",
     "playwright>=1.48",
+    "huggingface-hub>=0.30",
 ]
 
 [project.optional-dependencies]
