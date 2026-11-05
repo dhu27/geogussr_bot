@@ -245,7 +245,9 @@ def pull(name: str, *, force: bool = False, log=print) -> Path:
     if not api.file_exists(repo, f"{name}/{MANIFEST}", repo_type=REPO_TYPE):
         raise HubError(f"'{name}' is not a complete dataset on {repo} (run `list`)")
 
-    cache = data_root() / "_hub_download"
+    # Per-dataset download area: kept if the pull is interrupted (re-running resumes),
+    # removed once the dataset is extracted and verified.
+    cache = data_root() / "_hub_download" / name
     snapshot_download(
         repo,
         repo_type=REPO_TYPE,
@@ -271,6 +273,8 @@ def pull(name: str, *, force: bool = False, log=print) -> Path:
     if "embeddings.npy" in manifest["files"] and mismatch:
         log(f"WARNING: embeddings were made with a different view spec: {mismatch}")
     (dest / MANIFEST).write_text(json.dumps(manifest, indent=2))  # marks the pull complete
-    shutil.rmtree(src, ignore_errors=True)
+    shutil.rmtree(cache, ignore_errors=True)
+    if not any(cache.parent.iterdir()):
+        cache.parent.rmdir()
     log(f"pulled {name}: {len(images)} images -> {dest}")
     return dest

@@ -95,6 +95,7 @@ def test_push_then_pull(fake_hub):
     assert len(pulled) == manifest["n_images"]
     assert json.loads((dest / hub.MANIFEST).read_text())["name"] == "smoke"
     assert (dest / "embeddings.npy").is_file()
+    assert sorted(p.name for p in local.iterdir()) == ["smoke"]  # download area cleaned up
 
 
 def test_push_resumes_after_interruption(fake_hub):
