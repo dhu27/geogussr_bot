@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Geo Game</title>
+  <link rel="stylesheet" href="/static/vendor/pannellum.css">
+  <link rel="stylesheet" href="/static/vendor/leaflet.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <section class="look">
+      <!-- #pano renders exactly the view spec (core/view_spec.py): 336x336, hfov 90, pitch 0.
+           The harness screenshots only this element. Keep every other UI element outside it. -->
+      <div id="pano"></div>
+      <div class="turns">
+        <button id="turn-left" title="Turn left 45° (Q)">⟲ 45°</button>
+        <span id="heading-label"></span>
+        <button id="turn-right" title="Turn right 45° (E)">45° ⟳</button>
+      </div>
+    </section>
+    <section class="guess">
+      <div id="map"></div>
+      <div class="actions">
+        <button id="submit" disabled>Guess</button>
+        <button id="next-round" hidden>Next round</button>
+        <span id="result"></span>
+      </div>
+    </section>
+  </main>
+  <footer>
+    Street-level imagery © <a href="https://www.mapillary.com" target="_blank" rel="noopener">Mapillary</a>
+    contributors, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>.
+    Map data © OpenStreetMap contributors.
+  </footer>
+  <script src="/static/vendor/pannellum.js"></script>
+  <script src="/static/vendor/leaflet.js"></script>
+  <script src="/static/game.js"></script>
+</body>
+</html>

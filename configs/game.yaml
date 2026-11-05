@@ -1,0 +1,6 @@
+# game/: Flask backend + Pannellum/Leaflet frontend.
+host: 127.0.0.1
+port: 5055
+dataset: tests/fixtures   # directory with images.parquet + images/
+splits: [test]            # which splits rounds are drawn from
+seed: null                # set for a reproducible round order

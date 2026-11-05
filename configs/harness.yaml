@@ -1,0 +1,7 @@
+# harness/: Playwright.
+headless: false        # watchable by default (PLAN.md 7.5)
+slow_mo_ms: 300
+cursor_overlay: true
+record_video: true
+output_dir: runs/harness   # videos, traces, round logs (gitignored)
+viewport: {width: 1280, height: 800}

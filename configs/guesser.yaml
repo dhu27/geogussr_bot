@@ -1,0 +1,5 @@
+# models/guesser/: geocells, classifier, multi-view combining, expected-score guess.
+n_cells: 8             # placeholder size for fixtures; real value set at M1/M2
+kmeans_iters: 50
+seed: 0
+temperature: 20.0      # placeholder classifier: softmax(temperature * cosine(view, cell mean))

@@ -1,0 +1,4 @@
+# models/policy/: Phase 2 navigation. Phase 1 uses the fixed look-around strategy.
+policy: look_around    # look_around | random
+n_views: 8             # look_around: views to collect before guessing
+seed: 0

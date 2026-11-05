@@ -1,0 +1,42 @@
+# data/: Mapillary sampling, download, filtering, splits.
+data_root: datasets            # gitignored; override with GEO_DATA_ROOT (e.g. the shared drive)
+image_width: 1024              # Mapillary thumb size to store (thumb_1024_url)
+min_quality_score: 0.0         # placeholder; tune at M1
+max_images_per_sequence: 20
+
+splits:                        # fractions of *regions*; creators are kept on one side (data/splits.py)
+  train: 0.7
+  val: 0.15
+  test: 0.15
+  seed: 0
+
+# tests/fixtures/: ~50 real panoramas, 2 per region, built by scripts/make_fixtures.py.
+fixtures:
+  per_region: 2
+  bbox_half_deg: 0.005         # ~1 km box; shrinks on API errors, grows when empty
+  regions:
+    - {region_id: fx_amsterdam,   country: NL, continent: EU, lat: 52.370,  lon: 4.895}
+    - {region_id: fx_berlin,      country: DE, continent: EU, lat: 52.520,  lon: 13.405}
+    - {region_id: fx_helsinki,    country: FI, continent: EU, lat: 60.170,  lon: 24.940}
+    - {region_id: fx_lisbon,      country: PT, continent: EU, lat: 38.722,  lon: -9.139}
+    - {region_id: fx_warsaw,      country: PL, continent: EU, lat: 52.230,  lon: 21.011}
+    - {region_id: fx_madrid,      country: ES, continent: EU, lat: 40.417,  lon: -3.704}
+    - {region_id: fx_san_fran,    country: US, continent: NA, lat: 37.775,  lon: -122.419}
+    - {region_id: fx_toronto,     country: CA, continent: NA, lat: 43.653,  lon: -79.383}
+    - {region_id: fx_mexico_city, country: MX, continent: NA, lat: 19.433,  lon: -99.133}
+    - {region_id: fx_denver,      country: US, continent: NA, lat: 39.739,  lon: -104.990}
+    - {region_id: fx_sao_paulo,   country: BR, continent: SA, lat: -23.550, lon: -46.633}
+    - {region_id: fx_bogota,      country: CO, continent: SA, lat: 4.711,   lon: -74.072}
+    - {region_id: fx_santiago,    country: CL, continent: SA, lat: -33.449, lon: -70.669}
+    - {region_id: fx_buenos_aires, country: AR, continent: SA, lat: -34.604, lon: -58.382}
+    - {region_id: fx_tokyo,       country: JP, continent: AS, lat: 35.681,  lon: 139.767}
+    - {region_id: fx_bangkok,     country: TH, continent: AS, lat: 13.756,  lon: 100.502}
+    - {region_id: fx_jakarta,     country: ID, continent: AS, lat: -6.200,  lon: 106.817}
+    - {region_id: fx_bengaluru,   country: IN, continent: AS, lat: 12.972,  lon: 77.595}
+    - {region_id: fx_taipei,      country: TW, continent: AS, lat: 25.033,  lon: 121.565}
+    - {region_id: fx_nairobi,     country: KE, continent: AF, lat: -1.286,  lon: 36.817}
+    - {region_id: fx_cape_town,   country: ZA, continent: AF, lat: -33.925, lon: 18.424}
+    - {region_id: fx_kigali,      country: RW, continent: AF, lat: -1.944,  lon: 30.062}
+    - {region_id: fx_accra,       country: GH, continent: AF, lat: 5.604,   lon: -0.187}
+    - {region_id: fx_sydney,      country: AU, continent: OC, lat: -33.869, lon: 151.209}
+    - {region_id: fx_auckland,    country: NZ, continent: OC, lat: -36.849, lon: 174.763}
