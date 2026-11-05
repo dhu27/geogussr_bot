@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Ruff
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Install Chromium
+        run: uv run playwright install --with-deps chromium
+
+      - name: Pytest
+        run: uv run pytest -q
+
+      - name: End-to-end on fixtures
+        run: uv run python scripts/run_e2e.py --out runs/e2e/ci --rounds 3 --video
+
+      - name: Upload e2e report, video and trace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-${{ github.run_id }}
+          path: runs/e2e/ci/
+          if-no-files-found: ignore
+          retention-days: 14

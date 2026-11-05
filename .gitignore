@@ -1,0 +1,38 @@
+# Ground rule 3: no data or model weights in git. tests/fixtures/ is the one exception.
+/datasets/
+/runs/
+*.npy
+*.npz
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.parquet
+!tests/fixtures/*.npy
+!tests/fixtures/*.parquet
+
+# Secrets
+.env
+
+# Python / tooling
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Notebooks stay out unless paired via jupytext (PLAN.md 12)
+*.ipynb
+.ipynb_checkpoints/
+
+# Playwright
+test-results/
+playwright-report/
+
+.DS_Store
+.vscode/
+.idea/
