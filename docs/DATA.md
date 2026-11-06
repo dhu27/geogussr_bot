@@ -47,8 +47,12 @@ reproducible.
 
 ### 1. Make the downloader real
 
-`data/downloader.py` is still the M0 placeholder (it copies `tests/fixtures/`). Replace the body
-of `download(out_dir, split_fractions, seed)`; keep its signature and output contract:
+`data/downloader.py` has two sources behind one entry point: `source="fixtures"` (the default,
+copies `tests/fixtures/`; `run_e2e.py` and CI use it, so they never call Mapillary) and
+`source="mapillary"`, the real downloader (`scripts/download.py --source mapillary`). The
+regions to sample are `pilot.regions` in `configs/data.yaml`: a region is a block of zoom-14
+coverage tiles around a centre point (`data/tiles.py`; `data/mvt.py` reads the tile format, so
+no extra package is needed). The output contract is:
 
 - `out_dir/images/<image_id>.jpg`: equirectangular panoramas (2:1 aspect; drop anything else).
 - `out_dir/images.parquet`: the columns in `core/schemas.py`, written with
@@ -87,8 +91,30 @@ Then delete `smoke_test/` on the hub (web UI → Files → folder → Delete) so
 
 ### 3. The real run
 
+First a small trial (a few regions, a few images each) to check your token and the output:
+
 ```bash
-uv run python scripts/download.py --name pilot_v1        # real downloader -> datasets/pilot_v1/
+uv run python scripts/download.py --name trial --source mapillary \
+    --regions eu_london,sa_lima --images-per-region 10
+```
+
+Look at the printed summary, then delete `datasets/trial/`. Then the real run:
+
+```bash
+uv run python scripts/download.py --name pilot_v1 --source mapillary   # -> datasets/pilot_v1/
+```
+
+It prints one line per region and a summary (images per continent, regions below
+`pilot.min_images_per_region`, failed regions, and the `quality_score` spread). A failed region is
+logged and skipped, and the run stops early only if the first three regions all fail (usually a
+bad token or no network). If it is interrupted, run the same command again: lookups are cached in
+`datasets/pilot_v1/.cache/` and finished images are kept, so it picks up where it stopped (if the
+run had already finished, pick a new `--name`). The `.cache/` folder is never uploaded and is safe
+to delete after the push. Use the quality summary to tune `min_quality_score` in
+`configs/data.yaml`: regions with too few images or missing continents are fixed by editing
+`pilot.regions` and re-running under a new name.
+
+```bash
 uv sync --extra ml                                       # torch + transformers for StreetCLIP
 uv run python scripts/embed.py --name pilot_v1 --encoder streetclip
 uv run python scripts/data_hub.py push pilot_v1          # resumable: just re-run if it drops

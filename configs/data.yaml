@@ -2,7 +2,8 @@
 data_root: datasets            # gitignored; override with GEO_DATA_ROOT
 hub_repo: ResearchGeogussr/geoguessr-rl-data   # private HF dataset repo; see docs/DATA.md
 image_width: 1024              # Mapillary thumb size to store (thumb_1024_url)
-min_quality_score: 0.0         # placeholder; tune at M1
+min_quality_score: 0.5         # drop images scoring below this; images with no score pass. TUNE after
+                               # looking at the score summary the pilot run prints (see docs/DATA.md)
 max_images_per_sequence: 20
 
 splits:                        # fractions of *regions*; creators are kept on one side (data/splits.py)
@@ -41,3 +42,71 @@ fixtures:
     - {region_id: fx_accra,       country: GH, continent: AF, lat: 5.604,   lon: -0.187}
     - {region_id: fx_sydney,      country: AU, continent: OC, lat: -33.869, lon: 151.209}
     - {region_id: fx_auckland,    country: NZ, continent: OC, lat: -36.849, lon: 174.763}
+
+# Real downloader (scripts/download.py --source mapillary). A region is a block of
+# (2*tile_radius+1)^2 zoom-14 coverage tiles around its centre (radius 1 -> 3x3 tiles, roughly
+# 4-7 km across). Images are sampled from inside the block, at most max_images_per_sequence per
+# capture sequence (top of this file), up to images_per_region per region.
+pilot:
+  images_per_region: 100
+  tile_zoom: 14                # Mapillary serves its image layer at zoom 14 only
+  tile_radius: 1
+  min_images_per_region: 30    # a region below this is kept but flagged in the run summary
+  workers: 4                   # parallel image lookups/downloads; keep modest (API rate limits)
+  regions:                     # ~50, one per country where possible (PLAN.md 7.1)
+    # Europe (10)
+    - {region_id: eu_london,        country: GB, continent: EU, lat: 51.507,  lon: -0.128}
+    - {region_id: eu_paris,         country: FR, continent: EU, lat: 48.857,  lon: 2.352}
+    - {region_id: eu_rome,          country: IT, continent: EU, lat: 41.903,  lon: 12.496}
+    - {region_id: eu_vienna,        country: AT, continent: EU, lat: 48.208,  lon: 16.374}
+    - {region_id: eu_stockholm,     country: SE, continent: EU, lat: 59.329,  lon: 18.069}
+    - {region_id: eu_prague,        country: CZ, continent: EU, lat: 50.076,  lon: 14.438}
+    - {region_id: eu_athens,        country: GR, continent: EU, lat: 37.984,  lon: 23.728}
+    - {region_id: eu_bucharest,     country: RO, continent: EU, lat: 44.427,  lon: 26.103}
+    - {region_id: eu_dublin,        country: IE, continent: EU, lat: 53.350,  lon: -6.260}
+    - {region_id: eu_reykjavik,     country: IS, continent: EU, lat: 64.147,  lon: -21.943}
+    # North America (9)
+    - {region_id: na_new_york,      country: US, continent: NA, lat: 40.713,  lon: -74.006}
+    - {region_id: na_phoenix,       country: US, continent: NA, lat: 33.449,  lon: -112.074}
+    - {region_id: na_montreal,      country: CA, continent: NA, lat: 45.502,  lon: -73.567}
+    - {region_id: na_guadalajara,   country: MX, continent: NA, lat: 20.659,  lon: -103.349}
+    - {region_id: na_guatemala,     country: GT, continent: NA, lat: 14.634,  lon: -90.507}
+    - {region_id: na_san_jose,      country: CR, continent: NA, lat: 9.928,   lon: -84.091}
+    - {region_id: na_panama_city,   country: PA, continent: NA, lat: 8.983,   lon: -79.519}
+    - {region_id: na_santo_domingo, country: DO, continent: NA, lat: 18.486,  lon: -69.931}
+    - {region_id: na_kingston,      country: JM, continent: NA, lat: 17.997,  lon: -76.793}
+    # South America (8)
+    - {region_id: sa_medellin,      country: CO, continent: SA, lat: 6.244,   lon: -75.581}
+    - {region_id: sa_lima,          country: PE, continent: SA, lat: -12.046, lon: -77.043}
+    - {region_id: sa_quito,         country: EC, continent: SA, lat: -0.180,  lon: -78.468}
+    - {region_id: sa_la_paz,        country: BO, continent: SA, lat: -16.490, lon: -68.119}
+    - {region_id: sa_montevideo,    country: UY, continent: SA, lat: -34.901, lon: -56.164}
+    - {region_id: sa_asuncion,      country: PY, continent: SA, lat: -25.264, lon: -57.576}
+    - {region_id: sa_curitiba,      country: BR, continent: SA, lat: -25.429, lon: -49.271}
+    - {region_id: sa_cordoba,       country: AR, continent: SA, lat: -31.420, lon: -64.188}
+    # Asia (10)
+    - {region_id: as_osaka,         country: JP, continent: AS, lat: 34.694,  lon: 135.502}
+    - {region_id: as_seoul,         country: KR, continent: AS, lat: 37.567,  lon: 126.978}
+    - {region_id: as_manila,        country: PH, continent: AS, lat: 14.600,  lon: 120.984}
+    - {region_id: as_hanoi,         country: VN, continent: AS, lat: 21.028,  lon: 105.854}
+    - {region_id: as_kuala_lumpur,  country: MY, continent: AS, lat: 3.139,   lon: 101.687}
+    - {region_id: as_mumbai,        country: IN, continent: AS, lat: 19.076,  lon: 72.878}
+    - {region_id: as_dhaka,         country: BD, continent: AS, lat: 23.811,  lon: 90.413}
+    - {region_id: as_colombo,       country: LK, continent: AS, lat: 6.927,   lon: 79.861}
+    - {region_id: as_ulaanbaatar,   country: MN, continent: AS, lat: 47.886,  lon: 106.906}
+    - {region_id: as_amman,         country: JO, continent: AS, lat: 31.954,  lon: 35.910}
+    # Africa (8)
+    - {region_id: af_lagos,         country: NG, continent: AF, lat: 6.524,   lon: 3.379}
+    - {region_id: af_dar_es_salaam, country: TZ, continent: AF, lat: -6.792,  lon: 39.208}
+    - {region_id: af_kampala,       country: UG, continent: AF, lat: 0.348,   lon: 32.582}
+    - {region_id: af_addis_ababa,   country: ET, continent: AF, lat: 9.030,   lon: 38.740}
+    - {region_id: af_dakar,         country: SN, continent: AF, lat: 14.717,  lon: -17.467}
+    - {region_id: af_tunis,         country: TN, continent: AF, lat: 36.806,  lon: 10.182}
+    - {region_id: af_johannesburg,  country: ZA, continent: AF, lat: -26.204, lon: 28.047}
+    - {region_id: af_casablanca,    country: MA, continent: AF, lat: 33.573,  lon: -7.589}
+    # Oceania (5)
+    - {region_id: oc_melbourne,     country: AU, continent: OC, lat: -37.814, lon: 144.963}
+    - {region_id: oc_perth,         country: AU, continent: OC, lat: -31.950, lon: 115.860}
+    - {region_id: oc_wellington,    country: NZ, continent: OC, lat: -41.287, lon: 174.776}
+    - {region_id: oc_christchurch,  country: NZ, continent: OC, lat: -43.532, lon: 172.636}
+    - {region_id: oc_suva,          country: FJ, continent: OC, lat: -18.142, lon: 178.442}
