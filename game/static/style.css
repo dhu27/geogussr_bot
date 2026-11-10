@@ -26,5 +26,10 @@ button {
 button:disabled { opacity: 0.45; cursor: default; }
 #submit:not(:disabled) { background: var(--accent); border-color: var(--accent); color: #fff; }
 #result { font-variant-numeric: tabular-nums; }
+#round-label, #score-label, #summary, #attribution { margin-top: 8px; }
+#round-label, #score-label { color: var(--muted); font-variant-numeric: tabular-nums; }
+#summary { font-size: 18px; font-weight: 600; }
+#attribution { color: var(--muted); font-size: 12px; }
+#attribution a { color: inherit; }
 footer { padding: 0 24px 24px; color: var(--muted); font-size: 12px; }
 footer a { color: inherit; }

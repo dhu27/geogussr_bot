@@ -93,8 +93,18 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default=cfg["dataset"])
     ap.add_argument("--port", type=int, default=cfg["port"])
+    ap.add_argument(
+        "--splits",
+        default=None,
+        help="comma-separated dataset splits to serve (default: configs/game.yaml)",
+    )
     args = ap.parse_args()
-    app = create_app(resolve(args.dataset), cfg.get("splits"), cfg.get("seed"))
+    splits = (
+        [split.strip() for split in args.splits.split(",") if split.strip()]
+        if args.splits is not None
+        else cfg.get("splits")
+    )
+    app = create_app(resolve(args.dataset), splits, cfg.get("seed"))
     app.run(host=cfg["host"], port=args.port)
 
 

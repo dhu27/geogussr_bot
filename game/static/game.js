@@ -5,11 +5,13 @@
   const STEP = 45; // core/view_spec.py HEADING_STEP_DEG
   const HFOV = 90; // core/view_spec.py HFOV_DEG
   const WORLD = { center: [20, 0], zoom: 1 };
+  const TOTAL_ROUNDS = 5;
 
   const $ = (sel) => document.querySelector(sel);
   const wrap = (a) => ((a % 360) + 360) % 360;
   const state = (window.__game = {
     round_id: null, heading: null, phase: "loading", view_ready: false, guess: null, result: null,
+    round_number: 0, total_rounds: TOTAL_ROUNDS, total_score: 0,
   });
   let round = null;
   let viewer = null;
@@ -40,6 +42,11 @@
 
   function showHeading() {
     $("#heading-label").textContent = `${Math.round(state.heading)}°`;
+  }
+
+  function showRoundProgress() {
+    $("#round-label").textContent = `Round ${state.round_number} of ${TOTAL_ROUNDS}`;
+    $("#score-label").textContent = `Total: ${Math.round(state.total_score)} pts`;
   }
 
   function setHeading(heading, animate) {
@@ -85,6 +92,14 @@
 
   // ---- rounds ------------------------------------------------------------------------
   async function newRound() {
+    if (state.round_number >= TOTAL_ROUNDS) {
+      state.phase = "finished";
+      $("#next-round").hidden = true;
+      $("#summary").hidden = false;
+      $("#summary").textContent = `Game complete — ${Math.round(state.total_score)} points`;
+      return;
+    }
+    state.round_number += 1;
     Object.assign(state, { phase: "loading", view_ready: false, guess: null, result: null });
     layer.clearLayers();
     guessMarker = null;
@@ -92,6 +107,9 @@
     $("#submit").disabled = true;
     $("#next-round").hidden = true;
     $("#result").textContent = "";
+    $("#summary").hidden = true;
+    $("#attribution").hidden = true;
+    showRoundProgress();
     round = await (await fetch("/api/round/new")).json();
     state.round_id = round.round_id;
     state.pano_url = round.pano_url; // logging + consistency checks only
@@ -111,6 +129,13 @@
     L.polyline([[state.guess.lat, state.guess.lon], truth], { color: "#6b6b66", dashArray: "4 6" }).addTo(layer);
     map.fitBounds(L.latLngBounds([[state.guess.lat, state.guess.lon], truth]).pad(0.3), { maxZoom: 8 });
     $("#result").textContent = `${r.distance_km.toFixed(1)} km · ${Math.round(r.score)} pts`;
+    state.total_score += r.score;
+    $("#attribution").hidden = false;
+    const imageId = round.pano_url.split("/").pop().replace(/\.jpg$/, "");
+    $("#attribution").innerHTML =
+      `Imagery: <a href="https://www.mapillary.com/app/?pKey=${encodeURIComponent(imageId)}" ` +
+      'target="_blank" rel="noopener">View on Mapillary</a>';
+    showRoundProgress();
     $("#next-round").hidden = false;
     state.result = r;
     state.phase = "guessed";

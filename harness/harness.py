@@ -180,6 +180,11 @@ class GameHarness:
         self.page.click(game_api.NEXT_ROUND)
         self._wait_view_ready()
 
+    def reload_round(self) -> None:
+        """Recover from a failed round by asking the page to start a fresh round."""
+        self.page.reload(wait_until="domcontentloaded")
+        self._wait_view_ready()
+
 
 def wait_for_server(url: str, timeout_s: float = 15.0) -> None:
     import requests

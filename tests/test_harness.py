@@ -68,3 +68,20 @@ def test_map_click_lands_near_target_and_submits(harness):
     )
     harness.next_round()
     assert harness.game_state()["phase"] == "looking"
+
+
+def test_five_round_game_shows_attribution_and_summary(harness):
+    harness.reload_round()
+    for round_number in range(5):
+        harness.place_guess(0.0, 0.0)
+        harness.submit()
+        image_id = harness.game_state()["pano_url"].rsplit("/", 1)[1].removesuffix(".jpg")
+        link = harness.page.locator("#attribution a")
+        assert link.get_attribute("href") == f"https://www.mapillary.com/app/?pKey={image_id}"
+        if round_number < 4:
+            harness.next_round()
+
+    harness.page.click("#next-round")
+    harness.page.wait_for_function("() => window.__game.phase === 'finished'")
+    assert harness.page.locator("#summary").is_visible()
+    assert harness.game_state()["total_score"] >= 0
