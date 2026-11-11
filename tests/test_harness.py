@@ -12,7 +12,7 @@ from env.encoders import FakeEncoder
 from game.app import create_app
 from game.server import serve_in_thread
 from harness.checks import crop_vs_screenshot
-from harness.harness import GameHarness
+from harness.harness import GameHarness, MapClickError
 
 pytestmark = pytest.mark.browser
 
@@ -68,6 +68,32 @@ def test_map_click_lands_near_target_and_submits(harness):
     )
     harness.next_round()
     assert harness.game_state()["phase"] == "looking"
+
+
+def test_every_round_starts_on_the_world_map_and_clicks_land(harness):
+    """Regression: the result zoom after a guess used to survive into the next round (Leaflet
+    re-applies an animation's target when it ends), so later targets were off-screen and the
+    click was silently clamped to the map edge, thousands of km off."""
+    harness.reload_round()
+    # Far-apart guess/truth pairs make the result fitBounds zoom and pan the most.
+    targets = [(43.65, -79.39), (12.98, 77.6), (-36.85, 174.76), (64.15, -21.94)]
+    for i, target in enumerate(targets):
+        view = harness.page.evaluate(
+            "() => ({z: window.__map.getZoom(), c: window.__map.getCenter()})"
+        )
+        assert view["z"] == 1 and abs(view["c"]["lng"]) < 1, f"round {i + 1} view {view}"
+        placed = harness.place_guess(*target)
+        assert haversine_km(*target, placed["lat"], placed["lon"]) < 25, (i, target, placed)
+        harness.submit()
+        harness.next_round()  # immediately, while the result animation is still running
+
+
+def test_off_screen_guess_is_refused_not_clamped(harness):
+    harness.reload_round()
+    harness.page.evaluate("() => window.__map.setView([48.85, 2.35], 8, {animate: false})")
+    with pytest.raises(MapClickError, match="off the visible map"):
+        harness.place_guess(-33.87, 151.21)  # Sydney, while the map shows Paris
+    harness.reload_round()
 
 
 def test_five_round_game_shows_attribution_and_summary(harness):

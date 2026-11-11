@@ -24,7 +24,7 @@ from env.encoders import make_encoder
 from game.app import create_app
 from game.server import serve_in_thread
 from harness.agent import play_round
-from harness.harness import GameHarness
+from harness.harness import GameHarness, MapClickError
 from models.guesser.classifier import CellGuesser
 from models.guesser.random import RandomGuesser
 from models.policy.baselines import LookAroundPolicy
@@ -80,8 +80,11 @@ def _round_record(result: dict) -> dict:
         "round_id": result["round_id"],
         "status": "ok",
         "seconds": result["seconds"],
-        "distance_km": result["distance_km"],
+        "distance_km": result["distance_km"],  # scored by the server at the PLACED guess
         "score": result["score"],
+        # How far the map click landed from pred_lat/lon. Near 0-10 km normally; anything
+        # large means distance_km/score don't measure the model's guess.
+        "click_error_km": result["click_error_km"],
     }
 
 
@@ -177,7 +180,7 @@ def main() -> int:
                         signal.signal(alarm_signal, previous_handler)
                 if time.monotonic() - started > args.timeout:
                     raise TimeoutError(f"round exceeded {args.timeout:.1f}s timeout")
-            except (PlaywrightError, TimeoutError, ValueError) as error:
+            except (PlaywrightError, TimeoutError, ValueError, MapClickError) as error:
                 records.append(
                     {
                         "round": index + 1,

@@ -91,6 +91,14 @@
   }
 
   // ---- rounds ------------------------------------------------------------------------
+  // Wait out any map animation before resetting the view. When a zoom animation (the result
+  // fitBounds after a guess) ends, Leaflet re-applies its target view, silently undoing a
+  // setView made meanwhile: the next round then starts on the previous round's zoomed view.
+  async function mapIdle() {
+    map.stop(); // cancels a pan animation
+    if (map._animatingZoom) await new Promise((resolve) => map.once("zoomend", resolve));
+  }
+
   async function newRound() {
     if (state.round_number >= TOTAL_ROUNDS) {
       state.phase = "finished";
@@ -103,6 +111,7 @@
     Object.assign(state, { phase: "loading", view_ready: false, guess: null, result: null });
     layer.clearLayers();
     guessMarker = null;
+    await mapIdle();
     map.setView(WORLD.center, WORLD.zoom, { animate: false });
     $("#submit").disabled = true;
     $("#next-round").hidden = true;

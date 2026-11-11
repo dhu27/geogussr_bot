@@ -129,7 +129,7 @@ def main() -> int:
         )
         for i in range(args.rounds):
             if i:
-                h.next_round()
+                h.advance()  # next round, or a new game after the 5th
             r = play_round(h, encoder, guesser, policy)
             rounds.append(r)
             log(
