@@ -98,3 +98,63 @@ def test_splits_roughly_hit_targets():
 def test_splits_deterministic():
     df = pd.DataFrame({"region_id": list("aabbccddeeff"), "creator_id": list("xyzxyzuvwuvw")})
     assert assign_splits(df, FRACS, 3).tolist() == assign_splits(df, FRACS, 3).tolist()
+
+
+def _pilot_like(seed: int) -> pd.DataFrame:
+    """The pilot_v1 shape: 45 regions (EU 10, NA 9, SA 8, AS 8, AF 5, OC 5), 20-100 images each,
+    a few creators per region."""
+    rng = np.random.default_rng(seed)
+    layout = {"EU": 10, "NA": 9, "SA": 8, "AS": 8, "AF": 5, "OC": 5}
+    rows = []
+    for cont, n_regions in layout.items():
+        for r in range(n_regions):
+            region = f"{cont}{r}"
+            for i in range(int(rng.integers(20, 101))):
+                rows.append((region, f"{region}_c{i % 4}", cont))
+    return pd.DataFrame(rows, columns=["region_id", "creator_id", "continent"])
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_every_continent_is_in_every_split(seed):
+    df = _pilot_like(seed)
+    df["split"] = assign_splits(df, FRACS, seed=seed)
+    check_no_leakage(df)
+    regions = df.groupby(["continent", "split"])["region_id"].nunique().unstack(fill_value=0)
+    assert (regions[["train", "val", "test"]] >= 1).all().all(), regions
+    share = df["split"].value_counts(normalize=True)
+    assert share["train"] == pytest.approx(0.7, abs=0.1)
+
+
+def test_creator_spanning_continents_keeps_regions_together():
+    df = _pilot_like(0)
+    df.loc[df["region_id"].isin(["EU0", "AS0"]), "creator_id"] = "globetrotter"
+    df["split"] = assign_splits(df, FRACS)
+    check_no_leakage(df)  # EU0 and AS0 share a creator, so they must share a split
+    assert (
+        df.loc[df["region_id"] == "EU0", "split"].iloc[0]
+        == (df.loc[df["region_id"] == "AS0", "split"].iloc[0])
+    )
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_a_creator_chaining_many_regions_lands_in_train(seed):
+    """The real pilot: one creator links 9 regions on 3 continents (21% of images). Processed in
+    random order, that group once landed in test and train fell to 34%."""
+    df = _pilot_like(seed)
+    chained = ["SA0", "SA1", "SA2", "SA3", "SA4", "SA5", "NA0", "NA1", "AS0"]
+    mask = df["region_id"].isin(chained) & (df.index % 2 == 0)  # shares some images per region
+    df.loc[mask, "creator_id"] = "prolific"
+    df["split"] = assign_splits(df, FRACS, seed=seed)
+    check_no_leakage(df)
+    assert df.loc[df["region_id"].isin(chained), "split"].eq("train").all()
+    share = df["split"].value_counts(normalize=True)
+    assert share["train"] == pytest.approx(0.7, abs=0.1), share
+    assert share["test"] == pytest.approx(0.15, abs=0.07), share
+
+
+def test_fixture_splits_cover_each_continent_with_three_regions(fixture_images):
+    df = fixture_images.copy()
+    df["split"] = assign_splits(df, FRACS)
+    per_cont = df.groupby("continent")["region_id"].nunique()
+    covered = df.groupby("continent")["split"].nunique()
+    assert (covered[per_cont >= 3] == 3).all()

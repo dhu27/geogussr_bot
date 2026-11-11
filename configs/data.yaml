@@ -54,6 +54,9 @@ pilot:
   min_images_per_region: 30    # a region below this is kept but flagged in the run summary
   workers: 4                   # parallel image lookups/downloads; keep modest (API rate limits)
   regions:                     # ~50, one per country where possible (PLAN.md 7.1)
+    # 45 active. 5 regions are commented out below ("DROPPED"): the pilot_v1 run (Nov 2026)
+    # found no usable panoramas in them. Before M2, check whether that was no coverage or our
+    # filters (min_quality_score, full 360 only), and replace or re-enable them.
     # Europe (10)
     - {region_id: eu_london,        country: GB, continent: EU, lat: 51.507,  lon: -0.128}
     - {region_id: eu_paris,         country: FR, continent: EU, lat: 48.857,  lon: 2.352}
@@ -84,26 +87,26 @@ pilot:
     - {region_id: sa_asuncion,      country: PY, continent: SA, lat: -25.264, lon: -57.576}
     - {region_id: sa_curitiba,      country: BR, continent: SA, lat: -25.429, lon: -49.271}
     - {region_id: sa_cordoba,       country: AR, continent: SA, lat: -31.420, lon: -64.188}
-    # Asia (10)
+    # Asia (8 active, 2 dropped)
     - {region_id: as_osaka,         country: JP, continent: AS, lat: 34.694,  lon: 135.502}
     - {region_id: as_seoul,         country: KR, continent: AS, lat: 37.567,  lon: 126.978}
     - {region_id: as_manila,        country: PH, continent: AS, lat: 14.600,  lon: 120.984}
     - {region_id: as_hanoi,         country: VN, continent: AS, lat: 21.028,  lon: 105.854}
     - {region_id: as_kuala_lumpur,  country: MY, continent: AS, lat: 3.139,   lon: 101.687}
     - {region_id: as_mumbai,        country: IN, continent: AS, lat: 19.076,  lon: 72.878}
-    - {region_id: as_dhaka,         country: BD, continent: AS, lat: 23.811,  lon: 90.413}
-    - {region_id: as_colombo,       country: LK, continent: AS, lat: 6.927,   lon: 79.861}
+    # DROPPED: - {region_id: as_dhaka,         country: BD, continent: AS, lat: 23.811,  lon: 90.413}
+    # DROPPED: - {region_id: as_colombo,       country: LK, continent: AS, lat: 6.927,   lon: 79.861}
     - {region_id: as_ulaanbaatar,   country: MN, continent: AS, lat: 47.886,  lon: 106.906}
     - {region_id: as_amman,         country: JO, continent: AS, lat: 31.954,  lon: 35.910}
-    # Africa (8)
-    - {region_id: af_lagos,         country: NG, continent: AF, lat: 6.524,   lon: 3.379}
+    # Africa (5 active, 3 dropped)
+    # DROPPED: - {region_id: af_lagos,         country: NG, continent: AF, lat: 6.524,   lon: 3.379}
     - {region_id: af_dar_es_salaam, country: TZ, continent: AF, lat: -6.792,  lon: 39.208}
     - {region_id: af_kampala,       country: UG, continent: AF, lat: 0.348,   lon: 32.582}
     - {region_id: af_addis_ababa,   country: ET, continent: AF, lat: 9.030,   lon: 38.740}
     - {region_id: af_dakar,         country: SN, continent: AF, lat: 14.717,  lon: -17.467}
-    - {region_id: af_tunis,         country: TN, continent: AF, lat: 36.806,  lon: 10.182}
+    # DROPPED: - {region_id: af_tunis,         country: TN, continent: AF, lat: 36.806,  lon: 10.182}
     - {region_id: af_johannesburg,  country: ZA, continent: AF, lat: -26.204, lon: 28.047}
-    - {region_id: af_casablanca,    country: MA, continent: AF, lat: 33.573,  lon: -7.589}
+    # DROPPED: - {region_id: af_casablanca,    country: MA, continent: AF, lat: 33.573,  lon: -7.589}
     # Oceania (5)
     - {region_id: oc_melbourne,     country: AU, continent: OC, lat: -37.814, lon: 144.963}
     - {region_id: oc_perth,         country: AU, continent: OC, lat: -31.950, lon: 115.860}
