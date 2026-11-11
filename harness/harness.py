@@ -40,6 +40,10 @@ _CURSOR_JS = """
 """
 
 
+class MapClickError(RuntimeError):
+    """The guess is not on the visible map, so clicking would submit somewhere else."""
+
+
 class GameHarness:
     def __init__(
         self,
@@ -147,14 +151,33 @@ class GameHarness:
             raise NotImplementedError(f"{action!r} (FORWARD/BACK arrive in Phase 2)")
         self._wait_view_ready()
 
+    # A point this many pixels past the map's edge is still clicked at the edge (a guess near the
+    # antimeridian sits right on it at zoom 1). Further out, the map is not showing the target,
+    # and clamping would silently submit a guess thousands of km away.
+    MAP_EDGE_TOLERANCE_PX = 8
+
+    def _wait_map_idle(self) -> None:
+        """Leaflet zoom animations move what latLngToContainerPoint returns; wait them out."""
+        self.page.wait_for_function("() => !window.__map._animatingZoom")
+
     def _map_point(self, lat: float, lon: float) -> tuple[float, float]:
         """Page pixel of (lat, lon) using Leaflet's own projection."""
+        self._wait_map_idle()
         box = self.page.locator(game_api.MAP).bounding_box()
         pt = self.page.evaluate(
             "([lat, lon]) => { const p = window.__map.latLngToContainerPoint([lat, lon]); "
             "return [p.x, p.y]; }",
             [lat, lon],
         )
+        tol = self.MAP_EDGE_TOLERANCE_PX
+        if not (-tol <= pt[0] <= box["width"] + tol and -tol <= pt[1] <= box["height"] + tol):
+            view = self.page.evaluate(
+                "() => ({zoom: window.__map.getZoom(), center: window.__map.getCenter()})"
+            )
+            raise MapClickError(
+                f"guess ({lat:.2f}, {lon:.2f}) is off the visible map (container point "
+                f"{pt[0]:.0f}, {pt[1]:.0f}; map view {view}); refusing to click the edge"
+            )
         x = min(max(pt[0], 2), box["width"] - 2)
         y = min(max(pt[1], 2), box["height"] - 2)
         return box["x"] + x, box["y"] + y
@@ -164,8 +187,13 @@ class GameHarness:
         Returns the guess the page actually recorded, for logging pixel-quantisation error."""
         for _ in range(self.map_zoom_steps):
             x, y = self._map_point(lat, lon)
+            zoom = self.page.evaluate("() => window.__map.getZoom()")
             self.page.mouse.dblclick(x, y)
-            self.page.wait_for_timeout(350)  # Leaflet zoom animation
+            self.page.wait_for_function(  # zoomed in (or at max zoom), animation finished
+                "z => (window.__map.getZoom() > z || window.__map.getZoom() >= "
+                "window.__map.getMaxZoom()) && !window.__map._animatingZoom",
+                arg=zoom,
+            )
         x, y = self._map_point(lat, lon)
         self.page.mouse.click(x, y)
         self.page.wait_for_function(f"() => {game_api.GAME_STATE_JS}.guess !== null")
@@ -184,6 +212,14 @@ class GameHarness:
         """Recover from a failed round by asking the page to start a fresh round."""
         self.page.reload(wait_until="domcontentloaded")
         self._wait_view_ready()
+
+    def advance(self) -> None:
+        """Go to the next round; after a game's last round, start a new game."""
+        state = self.game_state()
+        if state.get("round_number", 0) >= state.get("total_rounds", float("inf")):
+            self.reload_round()
+        else:
+            self.next_round()
 
 
 def wait_for_server(url: str, timeout_s: float = 15.0) -> None:
