@@ -15,9 +15,12 @@ re-raised without the URL to keep the token out of logs.
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import time
+import uuid
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -84,9 +87,21 @@ def parse_image_layer(features: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 class MapillaryTiles:
-    """Fetches coverage tiles. ``fetch`` returns the panoramas in a tile."""
+    """Fetches coverage tiles. ``fetch`` returns the panoramas in a tile.
 
-    def __init__(self, token: str | None = None, timeout_s: float = 60.0, max_retries: int = 3):
+    Tiles are large (1-4 MB each in cities: they list every image, not only panoramas), so pass
+    ``cache_dir`` to keep each tile's panorama list on disk: the region planner and the
+    downloader then share fetches, and a resumed run refetches nothing. Failures are not cached.
+    """
+
+    def __init__(
+        self,
+        token: str | None = None,
+        timeout_s: float = 60.0,
+        max_retries: int = 3,
+        cache_dir: str | Path | None = None,
+    ):
+        self.cache_dir = Path(cache_dir) if cache_dir else None
         load_dotenv()
         self.token = token or os.environ.get("MAPILLARY_TOKEN")
         if not self.token:
@@ -104,7 +119,9 @@ class MapillaryTiles:
                 r = self.session.get(
                     url, params={"access_token": self.token}, timeout=self.timeout_s
                 )
-            except (requests.Timeout, requests.ConnectionError) as e:
+            # Any transport error is worth a retry: timeouts, refused connections, and a
+            # response cut off mid-body (ChunkedEncodingError), which crashed a planning run.
+            except requests.RequestException as e:
                 if last:
                     raise TileError(f"tile {z}/{x}/{y}: {type(e).__name__}") from None
                 time.sleep(2**attempt)
@@ -122,8 +139,21 @@ class MapillaryTiles:
     def fetch(self, z: int, x: int, y: int) -> list[dict[str, Any]]:
         """Panoramas in tile (z, x, y): dicts with id, sequence_id, creator_id, is_pano=True,
         captured_at."""
+        cached = self.cache_dir / f"{z}_{x}_{y}.json" if self.cache_dir else None
+        if cached and cached.is_file():
+            try:
+                return json.loads(cached.read_text())
+            except json.JSONDecodeError:
+                pass  # a half-written file: fetch again
         raw = self.fetch_raw(z, x, y)
-        if not raw:
-            return []
-        features = decode_tile(raw, [IMAGE_LAYER]).get(IMAGE_LAYER, [])
-        return [c for c in parse_image_layer(features) if c["is_pano"]]
+        panos = []
+        if raw:
+            features = decode_tile(raw, [IMAGE_LAYER]).get(IMAGE_LAYER, [])
+            panos = [c for c in parse_image_layer(features) if c["is_pano"]]
+        if cached:
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            # Unique per writer: two threads can fetch the same tile (two cities in one tile).
+            tmp = cached.with_name(f"{cached.name}.{uuid.uuid4().hex}.part")
+            tmp.write_text(json.dumps(panos))
+            tmp.replace(cached)
+        return panos
