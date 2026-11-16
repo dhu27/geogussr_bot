@@ -33,7 +33,7 @@ from harness.harness import GameHarness
 from models.guesser.classifier import CellGuesser
 from models.policy.baselines import LookAroundPolicy
 
-CONSISTENCY_MIN_COSINE = 0.95
+CONSISTENCY_MIN_COSINE = 0.995  # with StreetCLIP a crop 45 deg off already scores up to 0.98
 
 
 def log(msg: str) -> None:

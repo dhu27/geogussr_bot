@@ -24,7 +24,9 @@ STATIC = Path(__file__).parent / "static"
 def create_app(
     dataset: str | Path, splits: list[str] | None = None, seed: int | None = None
 ) -> Flask:
-    root = Path(dataset)
+    # Absolute: send_from_directory resolves a relative path against this package, not the CWD,
+    # so create_app("datasets/x") used to 404 on every panorama.
+    root = Path(dataset).resolve()
     images = load_images(root)
     images = images[images["is_pano"]]
     if splits:

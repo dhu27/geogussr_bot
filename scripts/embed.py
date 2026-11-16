@@ -1,10 +1,12 @@
 """Crop every panorama at the 8 standard headings and embed the views (one-time pass).
 
-    uv run python scripts/embed.py --name pilot_v1      # encoder from configs/env.yaml
-    uv sync --extra ml
-    uv run python scripts/embed.py --name pilot_v1 --encoder streetclip
+    uv run python scripts/embed.py --name pilot_v2_sc   # encoder from configs/env.yaml
+    uv sync --extra ml                                   # StreetCLIP needs torch + transformers
+    uv run --extra ml python scripts/embed.py --name pilot_v2_sc --encoder streetclip
 
 Writes views.parquet + embeddings.npy next to images.parquet in <data_root>/<name>/.
+Interrupted? Run the same command again: finished chunks are kept and reused.
+StreetCLIP speed on an M3 Pro laptop: about 8 views/s (the pilot takes ~70 min).
 """
 
 from __future__ import annotations
@@ -31,8 +33,10 @@ def main() -> None:
         cfg["encoder"] = args.encoder
     root = dataset_dir(args.name)
     images = load_images(root)
+    n_views = int(images["is_pano"].sum()) * 8
+    print(f"embedding {n_views} views of {args.name} with {cfg['encoder']}", flush=True)
     t0 = time.monotonic()
-    views, emb = embed_dataset(images, root, make_encoder(cfg))
+    views, emb = embed_dataset(images, root, make_encoder(cfg), log=lambda m: print(m, flush=True))
     print(
         f"{len(views)} views embedded with {cfg['encoder']} in {time.monotonic() - t0:.0f}s"
         f" -> {root}"

@@ -1,6 +1,11 @@
 """Crop-vs-screenshot consistency check (PLAN.md M2, risk "training crops differ from what the
 game renders"). Reads ``window.__game`` to know the true pano/heading: this is evaluation code,
-not the model's input path."""
+not the model's input path.
+
+Threshold: require cosine >= 0.995, not the 0.95 in PLAN.md. StreetCLIP embeddings sit close
+together. Measured on 8 pilot panoramas (Nov 2026): the same view scored >= 0.9999, the crop
+45 degrees off up to 0.983, a different panorama 0.63-0.84. So 0.95 would pass a wrong heading.
+"""
 
 from __future__ import annotations
 

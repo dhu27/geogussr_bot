@@ -58,3 +58,14 @@ def test_page_has_contract_elements(client):
     ):
         assert f'id="{sel[1:]}"' in html
     assert "Mapillary" in html and "CC BY-SA" in html  # ground rule 4
+
+
+def test_relative_dataset_path_serves_panoramas(monkeypatch):
+    """create_app("tests/fixtures") from the repo root used to 404 every panorama: Flask resolved
+    the relative path against the game package."""
+    from core.config import REPO_ROOT
+
+    monkeypatch.chdir(REPO_ROOT)
+    client = create_app("tests/fixtures", seed=0).test_client()
+    r = client.get(game_api.NEW_ROUND).get_json()
+    assert client.get(r["pano_url"]).status_code == 200
