@@ -242,3 +242,24 @@ def test_fetch_retries_a_response_cut_off_mid_body(monkeypatch):
         TileError
     ):  # still a TileError (never a raw requests error) when it persists
         _tiles([cut, cut], max_retries=2).fetch(14, 1, 2)
+
+
+def test_disk_cache_shares_tiles_across_runs(tmp_path):
+    tile = make_tile({"image": IMAGES})
+    first = _tiles([_Resp(200, tile)])
+    first.cache_dir = tmp_path
+    assert len(first.fetch(14, 1, 2)) == 2
+    second = _tiles([])  # any network call would fail: the iterator is empty
+    second.cache_dir = tmp_path
+    assert [c["id"] for c in second.fetch(14, 1, 2)] == [c["id"] for c in first.fetch(14, 1, 2)]
+
+
+def test_disk_cache_keeps_empty_tiles_but_never_failures(tmp_path):
+    empty = _tiles([_Resp(204)])
+    empty.cache_dir = tmp_path
+    assert empty.fetch(14, 5, 5) == [] and (tmp_path / "14_5_5.json").is_file()
+    broken = _tiles([_Resp(403)])
+    broken.cache_dir = tmp_path
+    with pytest.raises(TileError):
+        broken.fetch(14, 6, 6)
+    assert not (tmp_path / "14_6_6.json").exists()

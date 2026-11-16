@@ -30,6 +30,7 @@ import hashlib
 import io
 import json
 import shutil
+import time
 import zlib
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -41,7 +42,7 @@ import pandas as pd
 import requests
 from PIL import Image
 
-from core.config import FIXTURES_DIR, load_config
+from core.config import FIXTURES_DIR, load_config, resolve
 from core.schemas import CONTINENTS, IMAGES_COLUMNS
 from data.dataset import load_images, write_images
 from data.mapillary import MapillaryClient, to_row
@@ -261,13 +262,24 @@ def _fetch_region(
     found: dict[str, dict[str, Any]] = {}
     n_ok = 0
     block = tiles_around(cx, cy, z, int(pilot.get("tile_radius", 1)))
-    for x, y in block:
+
+    def fetch(xy: tuple[int, int]) -> list[dict[str, Any]] | TileError:
         try:
-            for cand in tiles.fetch(z, x, y):
-                found.setdefault(cand["id"], cand)  # neighbouring tiles can repeat an image
-            n_ok += 1
+            return tiles.fetch(z, *xy)
         except TileError as e:
-            log(f"    {rid}: {e}")
+            return e
+
+    # Tiles are 1-4 MB each in cities, so fetch the block in parallel; results stay in block
+    # order, so the candidate set (and the images chosen) don't depend on thread timing.
+    with ThreadPoolExecutor(max_workers=min(len(block), int(pilot.get("workers", 4)))) as pool:
+        fetched = list(pool.map(fetch, block))
+    for result in fetched:
+        if isinstance(result, TileError):
+            log(f"    {rid}: {result}")
+            continue
+        for cand in result:
+            found.setdefault(cand["id"], cand)  # neighbouring tiles can repeat an image
+        n_ok += 1
     if n_ok == 0:
         raise RegionError(f"all {len(block)} coverage tiles failed")
     if not found:
@@ -300,6 +312,12 @@ def _fetch_region(
 
 
 # --- the run ------------------------------------------------------------------------------
+def tile_cache_dir(cfg: dict[str, Any]) -> Path:
+    """Shared by scripts/plan_regions.py and the downloader (coverage as of when it was fetched;
+    delete the folder to start fresh)."""
+    return resolve(cfg["data_root"]) / "_tiles_z14"
+
+
 def download_mapillary(
     out_dir: str | Path,
     split_fractions: dict[str, float],
@@ -316,12 +334,13 @@ def download_mapillary(
     regions = load_regions(pilot)
     out_dir = Path(out_dir)
     client = client or MapillaryClient()
-    tiles = tiles or MapillaryTiles()
+    tiles = tiles or MapillaryTiles(cache_dir=tile_cache_dir(cfg))
     (out_dir / "images").mkdir(parents=True, exist_ok=True)
 
     target = int(pilot["images_per_region"])
     rows: list[dict[str, Any]] = []
     failed: dict[str, str] = {}
+    t_start = time.monotonic()
     for i, region in enumerate(regions, 1):
         rid = region["region_id"]
         try:
@@ -337,7 +356,12 @@ def download_mapillary(
             continue
         rows.extend(region_rows)
         skip_note = f"  skipped {dict(skipped)}" if skipped else ""
-        log(f"[{i}/{len(regions)}] {rid:<20} {len(region_rows):>3}/{target}{skip_note}")
+        elapsed = time.monotonic() - t_start
+        left = elapsed / i * (len(regions) - i)
+        log(
+            f"[{i}/{len(regions)}] {rid:<20} {len(region_rows):>3}/{target}{skip_note}  "
+            f"({elapsed / 60:.0f} min so far, ~{left / 60:.0f} min left)"
+        )
 
     if not rows:
         raise RuntimeError("no images were downloaded for any region")

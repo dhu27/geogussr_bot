@@ -83,20 +83,21 @@ def test_generated_plan_is_a_valid_region_list():
     per_country: dict[str, int] = {}
     for r in regions:
         per_country[r["country"]] = per_country.get(r["country"], 0) + 1
-    assert max(per_country.values()) <= 12
+    assert max(per_country.values()) <= 10
 
 
-def test_tile_counter_disk_cache_skips_refetch(tmp_path, monkeypatch):
-    calls = []
+def test_pick_round_robins_countries_caps_and_spaces():
+    import pandas as pd
 
-    class FakeTiles:
-        def fetch(self, z, x, y):
-            calls.append((x, y))
-            return [{"id": "1", "sequence_id": "s"}, {"id": "2", "sequence_id": "s"}]
-
-    monkeypatch.setattr(plan_regions, "MapillaryTiles", FakeTiles)
-    first = plan_regions.TileCounter(14, tmp_path)
-    assert len(first.panos(3, 4)) == 2
-    second = plan_regions.TileCounter(14, tmp_path)  # a new run: memory cache is empty
-    assert second.panos(3, 4) == [{"id": "1", "sequence_id": "s"}, {"id": "2", "sequence_id": "s"}]
-    assert calls == [(3, 4)]
+    rows = [  # FR: 3 cities, one 10 km from Paris; DE: 2 cities; LU: 1
+        ("Paris", "FR", 48.86, 2.35, 2_100_000), ("Near Paris", "FR", 48.90, 2.45, 900_000),
+        ("Lyon", "FR", 45.76, 4.84, 500_000), ("Berlin", "DE", 52.52, 13.40, 3_600_000),
+        ("Hamburg", "DE", 53.55, 9.99, 1_800_000), ("Luxembourg", "LU", 49.61, 6.13, 120_000),
+    ]  # fmt: skip
+    df = pd.DataFrame(rows, columns=["name", "country", "lat", "lon", "population"])
+    chosen = [c["name"] for c in plan_regions.pick(df, target=10, max_per_country=2, min_km=25)]
+    # one per country per round, countries by total candidate population (DE 5.4M > FR 3.5M)
+    assert chosen[:3] == ["Berlin", "Paris", "Luxembourg"]
+    assert "Near Paris" not in chosen  # too close to Paris
+    assert sorted(chosen) == ["Berlin", "Hamburg", "Luxembourg", "Lyon", "Paris"]
+    assert len(plan_regions.pick(df, target=2, max_per_country=2, min_km=25)) == 2
