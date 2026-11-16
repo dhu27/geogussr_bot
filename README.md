@@ -29,13 +29,13 @@ harness screenshot vs. the canonical training crop.
 | Path | What |
 |---|---|
 | `core/` | Contracts: view spec + crop function, schemas, interfaces, game API, scoring, metrics. Change only by reviewed PR. |
-| `data/` | Mapillary client, splits (region + creator), downloader (placeholder: copies fixtures) |
+| `data/` | Mapillary client + coverage tiles, downloader (`--source mapillary`; `fixtures` for CI), splits (region + creator, balanced per continent), Hugging Face hub push/pull |
 | `env/` | Encoders (`FakeEncoder`, `StreetCLIPEncoder`), crop + embed pass, offline look-around env |
-| `models/guesser/` | Geocells, placeholder classifier, multi-view combining, expected-score guess |
+| `models/guesser/` | Geocells, trained softmax classifier (+ M0 nearest-mean baseline), multi-view combining, expected-score guess, offline evaluation |
 | `models/policy/` | Fixed strategies (look-around, random); PPO in Phase 2 |
 | `game/` | Flask backend + Pannellum/Leaflet frontend (vendored, works offline) |
 | `harness/` | Playwright harness, round loop, crop-vs-screenshot check |
-| `scripts/` | `run_e2e.py`, `make_fixtures.py`, `setup_github.py` |
+| `scripts/` | `run_e2e.py`, `download.py`, `embed.py`, `train_guesser.py`, `play.py`, `data_hub.py`, `make_fixtures.py`, `setup_github.py` |
 | `configs/` | One YAML per module |
 | `tests/fixtures/` | ~50 real Mapillary panoramas (CC BY-SA, see its ATTRIBUTION.md) + fake embeddings |
 
