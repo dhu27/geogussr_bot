@@ -229,3 +229,16 @@ def test_tiles_need_a_token(monkeypatch):
     monkeypatch.setattr("data.tiles.load_dotenv", lambda: None)
     with pytest.raises(RuntimeError, match="MAPILLARY_TOKEN"):
         MapillaryTiles()
+
+
+def test_fetch_retries_a_response_cut_off_mid_body(monkeypatch):
+    """A planning run crashed on this: IncompleteRead surfaces as ChunkedEncodingError."""
+    monkeypatch.setattr("data.tiles.time.sleep", lambda s: None)
+    tile = make_tile({"image": IMAGES})
+    cut = requests.exceptions.ChunkedEncodingError("Connection broken: IncompleteRead")
+    t = _tiles([cut, _Resp(200, tile)], max_retries=3)
+    assert len(t.fetch(14, 1, 2)) == 2
+    with pytest.raises(
+        TileError
+    ):  # still a TileError (never a raw requests error) when it persists
+        _tiles([cut, cut], max_retries=2).fetch(14, 1, 2)

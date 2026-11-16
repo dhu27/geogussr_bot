@@ -26,6 +26,7 @@ it never loses the other regions.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import shutil
@@ -276,6 +277,7 @@ def _fetch_region(
     ordered = select_candidates(list(found.values()), int(cfg["max_images_per_sequence"]), rng)
     rows: list[dict[str, Any]] = []
     skipped: Counter = Counter()
+    seen_files: set[str] = set()  # the same photo is sometimes uploaded twice (pilot: 5 pairs)
     pos = 0
     with ThreadPoolExecutor(max_workers=int(pilot.get("workers", 4))) as pool:
         while len(rows) < target and pos < len(ordered):
@@ -285,8 +287,13 @@ def _fetch_region(
             for row, reason in results:
                 if row is None:
                     skipped[reason] += 1
-                else:
-                    rows.append(row)
+                    continue
+                digest = hashlib.md5((out_dir / row["path"]).read_bytes()).hexdigest()
+                if digest in seen_files:
+                    skipped["duplicate image"] += 1  # byte-identical to one already kept
+                    continue
+                seen_files.add(digest)
+                rows.append(row)
     if not rows:
         raise RegionError(f"no usable images among {len(ordered)} candidates: {dict(skipped)}")
     return rows, skipped

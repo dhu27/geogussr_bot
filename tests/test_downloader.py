@@ -101,9 +101,15 @@ class FakeTiles:
 
 
 class FakeClient:
-    def __init__(self, records: list[dict], sizes: dict[int, tuple[int, int]] | None = None):
+    def __init__(
+        self,
+        records: list[dict],
+        sizes: dict[int, tuple[int, int]] | None = None,
+        same_image_as: dict[int, int] | None = None,
+    ):
         self.records = {r["id"]: r for r in records}
         self.sizes = sizes or {}
+        self.same_image_as = same_image_as or {}  # image_id -> id whose exact bytes it repeats
         self.image_calls: list[str] = []
         self.download_calls: list[str] = []
 
@@ -116,7 +122,9 @@ class FakeClient:
     def download(self, url: str) -> bytes:
         self.download_calls.append(url)
         image_id = int(url.rsplit("/", 1)[1].split("?")[0])
-        return jpeg(*self.sizes.get(image_id, (64, 32)))  # 64x32 = a 2:1 panorama
+        image_id = self.same_image_as.get(image_id, image_id)
+        colour = (image_id * 37 % 256, image_id * 91 % 256, image_id % 256)  # unique bytes per id
+        return jpeg(*self.sizes.get(image_id, (64, 32)), colour)  # 64x32 = a 2:1 panorama
 
 
 class NoNetwork:
@@ -372,3 +380,45 @@ def test_fixtures_source_still_copies_the_fixtures(tmp_path):
 def test_unknown_source_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="unknown source"):
         download(tmp_path, FRACS, 0, source="flickr")
+
+
+def test_thumbnail_download_retries_transport_errors_but_not_4xx(monkeypatch):
+    import requests as rq
+
+    from data.mapillary import MapillaryClient
+
+    monkeypatch.setattr("data.mapillary.time.sleep", lambda s: None)
+
+    class R:
+        def __init__(self, status, content=b"jpeg"):
+            self.status_code, self.content = status, content
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise rq.HTTPError(str(self.status_code))
+
+    seq = iter([rq.exceptions.ChunkedEncodingError("cut"), R(503), R(200)])
+
+    def fake_get(url, timeout=None):
+        r = next(seq)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+    monkeypatch.setattr("data.mapillary.requests.get", fake_get)
+    client = MapillaryClient(token="T", max_retries=3)
+    assert client.download("https://cdn/x.jpg") == b"jpeg"
+
+    monkeypatch.setattr("data.mapillary.requests.get", lambda url, timeout=None: R(403))
+    with pytest.raises(rq.HTTPError):  # expired URL: raised at once for a refresh
+        client.download("https://cdn/x.jpg")
+
+
+def test_byte_identical_uploads_are_kept_once(tmp_path, london_world):
+    """Mapillary sometimes holds the same photo twice under two ids (5 pairs in pilot_v1)."""
+    tiles, _ = london_world
+    _, client = london_world
+    dup = FakeClient(list(client.records.values()), sizes={302: (64, 64)}, same_image_as={401: 201})
+    df, log = run(tmp_path, [LONDON], tiles, dup, per_region=50)
+    assert not ({"201", "401"} <= set(df["image_id"]))  # both pass every filter; one kept
+    assert "duplicate image" in log

@@ -44,7 +44,7 @@ class MapillaryClient:
             last = attempt == self.max_retries - 1
             try:
                 r = self.session.get(f"{GRAPH_URL}/{path}", params=params, timeout=self.timeout_s)
-            except (requests.Timeout, requests.ConnectionError):
+            except requests.RequestException:  # timeouts, refused, cut off mid-response
                 if last:
                     raise
                 time.sleep(2**attempt)
@@ -79,10 +79,24 @@ class MapillaryClient:
         return self._get(image_id, {"fields": IMAGE_FIELDS})
 
     def download(self, url: str) -> bytes:
+        """A thumbnail's bytes. Transport errors and 5xx are retried; a 4xx (e.g. an expired
+        signed URL) is raised at once so the caller can fetch a fresh URL."""
         # Thumb URLs are pre-signed CDN links; they don't need (or want) the auth header.
-        r = requests.get(url, timeout=self.timeout_s)
-        r.raise_for_status()
-        return r.content
+        for attempt in range(self.max_retries):
+            last = attempt == self.max_retries - 1
+            try:
+                r = requests.get(url, timeout=self.timeout_s)
+            except requests.RequestException:
+                if last:
+                    raise
+                time.sleep(2**attempt)
+                continue
+            if r.status_code in RETRY_STATUS and not last:
+                time.sleep(2**attempt)
+                continue
+            r.raise_for_status()
+            return r.content
+        raise RuntimeError("unreachable")
 
 
 def to_row(img: dict[str, Any]) -> dict[str, Any]:

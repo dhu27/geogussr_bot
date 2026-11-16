@@ -104,7 +104,9 @@ class MapillaryTiles:
                 r = self.session.get(
                     url, params={"access_token": self.token}, timeout=self.timeout_s
                 )
-            except (requests.Timeout, requests.ConnectionError) as e:
+            # Any transport error is worth a retry: timeouts, refused connections, and a
+            # response cut off mid-body (ChunkedEncodingError), which crashed a planning run.
+            except requests.RequestException as e:
                 if last:
                     raise TileError(f"tile {z}/{x}/{y}: {type(e).__name__}") from None
                 time.sleep(2**attempt)
