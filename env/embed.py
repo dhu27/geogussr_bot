@@ -7,7 +7,8 @@ the same encoder. Once every chunk is done they are joined into views.parquet + 
 and the parts folder is removed.
 
 StreetCLIP runs at about 8 views/s on an M3 Pro (Nov 2026): roughly 70 min for the 4,058-panorama
-pilot and 14 h for ~400,000 views, so the full set is a Colab/GPU job or an overnight run.
+pilot and 14 h for ~400,000 views, so the full set is a Colab/GPU job or an overnight run. On
+CUDA the encoder uses fp16 (see env/encoders.py) and cropping overlaps with encoding.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import math
 import shutil
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -77,34 +79,48 @@ def embed_dataset(
     ids = panos["image_id"].astype(str).tolist()
     tag = encoder_tag(encoder)
     n_chunks = math.ceil(len(ids) / chunk_panos)
-    embs: list[np.ndarray] = []
-    t0, fresh_views, reused = time.monotonic(), 0, 0
+
+    def chunk(k: int) -> tuple[list[str], Path]:
+        return ids[k * chunk_panos : (k + 1) * chunk_panos], out / PARTS_DIR / f"part-{k:05d}.npz"
+
+    def crops_for(k: int) -> list[np.ndarray]:
+        rows = panos.iloc[k * chunk_panos : (k + 1) * chunk_panos].itertuples()
+        return [
+            crop
+            for img in rows
+            for crop in crop_all_headings(load_pano(root / img.path), img.compass_angle)
+        ]
+
+    done: dict[int, np.ndarray] = {}
     for k in range(n_chunks):
-        sl = slice(k * chunk_panos, (k + 1) * chunk_panos)
-        chunk_ids = ids[sl]
-        path = out / PARTS_DIR / f"part-{k:05d}.npz"
-        emb = _load_part(path, chunk_ids, tag)
-        if emb is None:
-            crops = [
-                crop
-                for img in panos.iloc[sl].itertuples()
-                for crop in crop_all_headings(load_pano(root / img.path), img.compass_angle)
-            ]
+        emb = _load_part(chunk(k)[1], chunk(k)[0], tag)
+        if emb is not None:
+            done[k] = emb
+    if log and done:
+        log(f"  reused {len(done)} chunk(s) saved by an earlier run")
+    todo = [k for k in range(n_chunks) if k not in done]
+
+    # Crop the next chunk on a CPU thread while the encoder works on this one, so a GPU is not
+    # left idle waiting for crops.
+    t0, fresh_views = time.monotonic(), 0
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        nxt = pool.submit(crops_for, todo[0]) if todo else None
+        for j, k in enumerate(todo):
+            crops = nxt.result()
+            nxt = pool.submit(crops_for, todo[j + 1]) if j + 1 < len(todo) else None
             emb = encoder.embed(crops).astype(np.float16)
+            chunk_ids, path = chunk(k)
             _save_part(path, chunk_ids, tag, emb)
+            done[k] = emb
             fresh_views += len(crops)
             if log:
                 rate = fresh_views / max(time.monotonic() - t0, 1e-9)
-                left = (len(ids) - min(len(ids), (k + 1) * chunk_panos)) * len(HEADINGS_DEG)
+                left = sum(len(chunk(i)[0]) for i in todo[j + 1 :]) * len(HEADINGS_DEG)
                 log(
                     f"  chunk {k + 1}/{n_chunks}: {rate:.1f} views/s, "
                     f"about {left / rate / 60:.0f} min left"
                 )
-        else:
-            reused += 1
-        embs.append(emb)
-    if log and reused:
-        log(f"  reused {reused} chunk(s) saved by an earlier run")
+    embs = [done[k] for k in range(n_chunks)]
 
     rows = [
         {"view_id": view_id(i, hd), "image_id": i, "heading_deg": hd, "row": r}
