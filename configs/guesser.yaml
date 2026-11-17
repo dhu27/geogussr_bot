@@ -8,7 +8,7 @@ l2: 0.001
 epochs: 300
 lr: 0.01
 sweep:
-  n_cells: [8, 16, 24, 32]
+  n_cells: [8, 16, 24, 32, 64, 128, 256]   # 64+ added for world_v1 (312 regions vs the pilot's 45)
   l2: [0.0001, 0.001, 0.01]
 
 temperature: 20.0      # NearestMeanGuesser baseline only (the M0 placeholder)
