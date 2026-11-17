@@ -49,4 +49,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["browser: needs Playwright Chromium (run `uv run playwright install chromium`)"]
+markers = [
+    "browser: needs Playwright Chromium (run `uv run playwright install chromium`)",
+    "ml: needs the ml extra (torch + transformers); skipped where it isn't installed, e.g. CI",
+]

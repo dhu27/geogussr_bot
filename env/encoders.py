@@ -51,6 +51,7 @@ class StreetCLIPEncoder:
                 else "cpu"
             )
         self.torch = torch
+        self.model_name = model_name
         self.device = device
         self.batch_size = batch_size
         self.model = CLIPModel.from_pretrained(model_name).to(device).eval()
@@ -64,6 +65,10 @@ class StreetCLIPEncoder:
                 feats = self.model.get_image_features(
                     pixel_values=batch["pixel_values"].to(self.device)
                 )
+                # transformers < 5 returns the projected embedding as a tensor; 5.x returns an
+                # output object whose pooler_output is that same projection (checked equal).
+                if not isinstance(feats, self.torch.Tensor):
+                    feats = feats.pooler_output
                 out.append(feats.float().cpu().numpy())
         if not out:
             return np.zeros((0, self.dim), np.float32)
