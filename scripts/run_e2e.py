@@ -82,7 +82,7 @@ def main() -> int:
     embed_dataset(images, ds, encoder)
     views, emb = load_views(ds)
 
-    log("guesser: fit geocells + placeholder classifier on train split")
+    log("guesser: fit geocells + softmax classifier on train split")
     v = views.merge(images[["image_id", "lat", "lon", "split"]], on="image_id")
     tr = v[v["split"] == "train"]
     guesser: Guesser = CellGuesser.fit(
@@ -90,7 +90,9 @@ def main() -> int:
         tr["lat"].to_numpy(),
         tr["lon"].to_numpy(),
         n_cells=g_cfg["n_cells"],
-        temperature=g_cfg["temperature"],
+        l2=g_cfg["l2"],
+        epochs=g_cfg["epochs"],
+        lr=g_cfg["lr"],
         iters=g_cfg["kmeans_iters"],
         seed=g_cfg["seed"],
     )

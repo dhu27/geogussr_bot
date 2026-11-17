@@ -6,7 +6,7 @@ from core.navigation import select_forward_neighbor
 from core.scoring import haversine_km
 from env.encoders import FakeEncoder
 from env.lookaround_env import LookAroundEnv
-from models.guesser.classifier import CellGuesser
+from models.guesser.classifier import CellGuesser, NearestMeanGuesser
 from models.guesser.combine import combine_views, expected_score_guess, expected_score_matrix
 from models.guesser.geocells import fit_geocells
 from models.policy.baselines import LookAroundPolicy, RandomPolicy
@@ -15,8 +15,12 @@ from models.policy.baselines import LookAroundPolicy, RandomPolicy
 def test_protocols():
     assert isinstance(FakeEncoder(), Encoder)
     assert isinstance(LookAroundPolicy(), Policy) and isinstance(RandomPolicy(), Policy)
-    g = CellGuesser(np.array([[0.0, 0.0], [10.0, 10.0]]), np.eye(2, 768), np.array([0.5, 0.5]))
-    assert isinstance(g, Guesser)
+    centroids, prior = np.array([[0.0, 0.0], [10.0, 10.0]]), np.array([0.5, 0.5])
+    assert isinstance(NearestMeanGuesser(centroids, np.eye(2, 768), prior), Guesser)
+    trained = CellGuesser(
+        centroids, np.zeros((768, 2)), np.zeros(2), np.zeros(768), np.ones(768), prior
+    )
+    assert isinstance(trained, Guesser)
 
 
 def test_fake_encoder_is_deterministic_and_normalised():
