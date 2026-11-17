@@ -7,6 +7,7 @@ of ``#pano`` at the same heading should embed almost identically (PLAN.md M2 che
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -47,21 +48,28 @@ def crop_view(
         raise ValueError(f"expected (H, W, 3) panorama, got shape {pano.shape}")
     h, w = pano.shape[:2]
     yaw = np.deg2rad(heading_to_pano_yaw(heading_deg, compass_angle))
+    ray_lon, lat = _rays(hfov_deg, pitch_deg, size)
+    lon = ray_lon + yaw  # 0 = panorama centre, positive = right
+    u = (lon / (2.0 * np.pi) + 0.5) * w - 0.5
+    v = (0.5 - lat / np.pi) * h - 0.5
+    return _bilinear(pano, u, v)
+
+
+@lru_cache(maxsize=8)
+def _rays(hfov_deg: float, pitch_deg: float, size: int) -> tuple[np.ndarray, np.ndarray]:
+    """(longitude before yaw, latitude) of each output pixel's ray. Depends only on the view
+    spec, so it is computed once rather than per crop."""
     pitch = np.deg2rad(pitch_deg)
     f = 1.0 / np.tan(np.deg2rad(hfov_deg) / 2.0)
-
     # Camera rays through pixel centres: x right, y up, z forward.
     t = (np.arange(size) + 0.5) / size * 2.0 - 1.0
     x, y = np.meshgrid(t, -t)
     z = np.full_like(x, f)
     # Pitch: rotate about the x axis.
     y, z = y * np.cos(pitch) + z * np.sin(pitch), -y * np.sin(pitch) + z * np.cos(pitch)
-
-    lon = np.arctan2(x, z) + yaw  # 0 = panorama centre, positive = right
-    lat = np.arctan2(y, np.hypot(x, z))
-    u = (lon / (2.0 * np.pi) + 0.5) * w - 0.5
-    v = (0.5 - lat / np.pi) * h - 0.5
-    return _bilinear(pano, u, v)
+    lon, lat = np.arctan2(x, z), np.arctan2(y, np.hypot(x, z))
+    lon.flags.writeable = lat.flags.writeable = False  # shared by every call
+    return lon, lat
 
 
 def crop_all_headings(
@@ -82,8 +90,14 @@ def _bilinear(img: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     u0 = u0 % w
     v1 = np.clip(v0 + 1, 0, h - 1)
     v0 = np.clip(v0, 0, h - 1)
-    src = img.astype(np.float32)
-    top = src[v0, u0] * (1 - du) + src[v0, u1] * du
-    bot = src[v1, u0] * (1 - du) + src[v1, u1] * du
+    # np.take on the flattened image is ~4x faster than img[v, u] fancy indexing, and only the
+    # sampled pixels are converted to float. Same values, same arithmetic as before.
+    flat = img.reshape(-1, img.shape[2])
+
+    def px(vv, uu):
+        return np.take(flat, vv * w + uu, axis=0).astype(np.float32)
+
+    top = px(v0, u0) * (1 - du) + px(v0, u1) * du
+    bot = px(v1, u0) * (1 - du) + px(v1, u1) * du
     out = top * (1 - dv) + bot * dv
     return np.clip(out + 0.5, 0, 255).astype(np.uint8)
