@@ -3,6 +3,8 @@
 Examples:
     uv run python scripts/play.py --dataset tests/fixtures --rounds 20 --headed
     uv run python scripts/play.py --dataset datasets/pilot_v1 --rounds 100
+    uv run --extra ml python scripts/play.py --dataset datasets/world_v1_sc --rounds 5 --headed \\
+        --guesser cell --weights runs/guesser/world_v1_sc/guesser.npz --timeout 120
 """
 
 from __future__ import annotations
@@ -37,6 +39,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--rounds", type=int, required=True, help="number of rounds to play")
     parser.add_argument("--guesser", choices=("random", "cell"), default="random")
     parser.add_argument("--weights", type=Path, help="CellGuesser .npz weights")
+    parser.add_argument(
+        "--encoder",
+        choices=("fake", "streetclip"),
+        help="default: streetclip with --guesser cell (it was trained on StreetCLIP "
+        "embeddings), otherwise configs/env.yaml",
+    )
     parser.add_argument("--views", type=int, choices=(1, 8), default=8)
     parser.add_argument(
         "--splits", default=None, help="comma-separated game splits (default: configs/game.yaml)"
@@ -100,8 +108,13 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     guesser = _make_guesser(args, images)
-    encoder_cfg = load_config("env")
+    encoder_cfg = dict(load_config("env"))
+    if args.encoder:
+        encoder_cfg["encoder"] = args.encoder
+    elif args.guesser == "cell":
+        encoder_cfg["encoder"] = "streetclip"
     encoder: Encoder = make_encoder(encoder_cfg)
+    print(f"guesser {args.guesser}, encoder {encoder_cfg['encoder']}, {args.views} view(s)")
     policy: Policy = LookAroundPolicy(args.views)
     splits = (
         [split.strip() for split in args.splits.split(",") if split.strip()]
