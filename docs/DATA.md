@@ -130,6 +130,7 @@ Post the dataset name. Everyone runs:
 
 ```bash
 uv run python scripts/data_hub.py pull pilot_v1          # -> datasets/pilot_v1/
+uv run python scripts/data_hub.py pull pilot_v1 --tables-only   # tables + embeddings, no images
 ```
 
 ## Reference

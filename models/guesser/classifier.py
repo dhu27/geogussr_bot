@@ -9,8 +9,9 @@ Two heads share the geocells, the multi-view combination and the expected-score 
 * ``NearestMeanGuesser`` (the M0 placeholder, kept as a baseline):
   p(k | v) = softmax(T * cos(v, mean embedding of cell k)).
 
-``CellGuesser.load(path)`` returns whichever kind was saved. Weights live under runs/, never in
-git (ground rule 3).
+``CellGuesser.load(path)`` returns whichever kind was saved. Both are registered in the model zoo
+(models/guesser/registry.py), so ``load_model(name)`` also works. Weights live under runs/,
+never in git (ground rule 3).
 """
 
 from __future__ import annotations
@@ -22,6 +23,9 @@ import numpy as np
 
 from models.guesser.combine import combine_views, expected_score_guess, expected_score_matrix
 from models.guesser.geocells import fit_geocells, latlon_to_xyz, xyz_to_latlon
+from models.guesser.registry import register
+
+WEIGHTS_FILE = "guesser.npz"
 
 
 def _candidates(centroids: np.ndarray) -> np.ndarray:
@@ -77,6 +81,14 @@ class _GeocellGuesser:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         np.savez(path, kind=self.kind, centroids=self.centroids, prior=self.prior, **self._arrays())
 
+    # Model-zoo interface (models/guesser/registry.py): a folder holding guesser.npz.
+    def save_to(self, folder: Path) -> None:
+        self.save(Path(folder) / WEIGHTS_FILE)
+
+    @classmethod
+    def load_from(cls, folder: Path) -> _GeocellGuesser:
+        return cls.load(Path(folder) / WEIGHTS_FILE)
+
     @classmethod
     def load(cls, path: str | Path) -> _GeocellGuesser:
         """Load any saved geocell guesser (files from before M1 hold a nearest-mean one)."""
@@ -89,6 +101,7 @@ class _GeocellGuesser:
         return kinds[kind]._from_arrays(arrays)
 
 
+@register("softmax")
 class CellGuesser(_GeocellGuesser):
     """Trained softmax head over geocells (M1)."""
 
@@ -137,6 +150,7 @@ class CellGuesser(_GeocellGuesser):
         return cls(a["centroids"], a["weights"], a["bias"], a["mean"], a["scale"], a["prior"])
 
 
+@register("nearest_mean")
 class NearestMeanGuesser(_GeocellGuesser):
     """The M0 placeholder, kept as a baseline: softmax(T * cosine to each cell's mean)."""
 

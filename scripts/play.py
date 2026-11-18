@@ -4,7 +4,7 @@ Examples:
     uv run python scripts/play.py --dataset tests/fixtures --rounds 20 --headed
     uv run python scripts/play.py --dataset datasets/pilot_v1 --rounds 100
     uv run --extra ml python scripts/play.py --dataset datasets/world_v1_sc --rounds 5 --headed \\
-        --guesser cell --weights runs/guesser/world_v1_sc/guesser.npz --timeout 120
+        --model softmax_k256 --timeout 120
 """
 
 from __future__ import annotations
@@ -27,8 +27,8 @@ from game.app import create_app
 from game.server import serve_in_thread
 from harness.agent import play_round
 from harness.harness import GameHarness, MapClickError
-from models.guesser.classifier import CellGuesser
 from models.guesser.random import RandomGuesser
+from models.guesser.registry import load_model
 from models.policy.baselines import LookAroundPolicy
 
 
@@ -37,12 +37,14 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", required=True, help="dataset directory")
     parser.add_argument("--rounds", type=int, required=True, help="number of rounds to play")
-    parser.add_argument("--guesser", choices=("random", "cell"), default="random")
-    parser.add_argument("--weights", type=Path, help="CellGuesser .npz weights")
+    parser.add_argument(
+        "--model",
+        help="trained guesser: name in runs/models/ or its folder (default: random guesses)",
+    )
     parser.add_argument(
         "--encoder",
         choices=("fake", "streetclip"),
-        help="default: streetclip with --guesser cell (it was trained on StreetCLIP "
+        help="default: streetclip with --model (models are trained on StreetCLIP "
         "embeddings), otherwise configs/env.yaml",
     )
     parser.add_argument("--views", type=int, choices=(1, 8), default=8)
@@ -67,10 +69,8 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _make_guesser(args: argparse.Namespace, images: pd.DataFrame) -> Guesser:
-    if args.guesser == "cell":
-        if args.weights is None:
-            raise SystemExit("--weights is required with --guesser cell")
-        return CellGuesser.load(args.weights)
+    if args.model:
+        return load_model(args.model)
     locations = images.loc[images["split"] == "train", ["lat", "lon"]].to_numpy()
     if len(locations) == 0:
         locations = images[["lat", "lon"]].to_numpy()
@@ -111,10 +111,12 @@ def main() -> int:
     encoder_cfg = dict(load_config("env"))
     if args.encoder:
         encoder_cfg["encoder"] = args.encoder
-    elif args.guesser == "cell":
+    elif args.model:
         encoder_cfg["encoder"] = "streetclip"
     encoder: Encoder = make_encoder(encoder_cfg)
-    print(f"guesser {args.guesser}, encoder {encoder_cfg['encoder']}, {args.views} view(s)")
+    print(
+        f"guesser {args.model or 'random'}, encoder {encoder_cfg['encoder']}, {args.views} view(s)"
+    )
     policy: Policy = LookAroundPolicy(args.views)
     splits = (
         [split.strip() for split in args.splits.split(",") if split.strip()]
