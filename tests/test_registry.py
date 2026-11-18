@@ -54,3 +54,30 @@ def test_new_kind_is_found_by_its_decorator(models_dir):
 def test_missing_model_says_how_to_pull(models_dir):
     with pytest.raises(FileNotFoundError, match="pull-model nope"):
         registry.load_model("nope")
+
+
+def test_teammate_subclass_of_the_geocell_base_loads(models_dir):
+    from models.guesser.classifier import _GeocellGuesser, _softmax
+
+    @registry.register("subclass_test")
+    class Tiny(_GeocellGuesser):
+        def __init__(self, centroids, prior, w):
+            super().__init__(centroids, prior)
+            self.w = w
+
+        def _per_view_probs(self, view_embs):
+            return _softmax(np.atleast_2d(view_embs) @ self.w)
+
+        def _arrays(self):
+            return {"w": self.w}
+
+        @classmethod
+        def _from_arrays(cls, a):
+            return cls(a["centroids"], a["prior"], a["w"])
+
+    g = Tiny(np.array([[0.0, 0.0], [10.0, 10.0]]), np.array([0.5, 0.5]), np.eye(2))
+    registry.save_model(g, name="sub", dataset="x", author="")
+    back = registry.load_model("sub")
+    assert type(back) is Tiny
+    np.testing.assert_allclose(back.cell_probs(np.array([[1.0, 0.0]])), g.cell_probs([[1.0, 0.0]]))
+    registry.REGISTRY.pop("subclass_test")

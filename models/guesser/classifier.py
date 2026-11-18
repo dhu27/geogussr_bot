@@ -87,7 +87,10 @@ class _GeocellGuesser:
 
     @classmethod
     def load_from(cls, folder: Path) -> _GeocellGuesser:
-        return cls.load(Path(folder) / WEIGHTS_FILE)
+        # Rebuild as THIS class (the registry picked it from model.json), so subclasses written
+        # by teammates load without being listed in ``load`` below.
+        with np.load(Path(folder) / WEIGHTS_FILE) as z:
+            return cls._from_arrays({k: z[k] for k in z.files if k != "kind"})
 
     @classmethod
     def load(cls, path: str | Path) -> _GeocellGuesser:
