@@ -31,7 +31,7 @@ harness screenshot vs. the canonical training crop.
 | `core/` | Contracts: view spec + crop function, schemas, interfaces, game API, scoring, metrics. Change only by reviewed PR. |
 | `data/` | Mapillary client + coverage tiles, downloader (`--source mapillary`; `fixtures` for CI), splits (region + creator, balanced per continent), Hugging Face hub push/pull |
 | `env/` | Encoders (`FakeEncoder`, `StreetCLIPEncoder`), crop + embed pass, offline look-around env |
-| `models/guesser/` | Geocells, trained softmax classifier (+ M0 nearest-mean baseline), multi-view combining, expected-score guess, offline evaluation, model registry (`registry.py`). Results: [docs/RESULTS.md](docs/RESULTS.md) |
+| `models/guesser/` | Geocells, trained softmax classifier (+ M0 nearest-mean baseline), multi-view combining, expected-score guess, offline evaluation, model registry (`registry.py`). Results: [docs/RESULTS.md](docs/RESULTS.md); building a variant: [docs/GUESSER_VARIANTS.md](docs/GUESSER_VARIANTS.md) |
 | `models/policy/` | Fixed strategies (look-around, random); PPO in Phase 2 |
 | `game/` | Flask backend + Pannellum/Leaflet frontend (vendored, works offline) |
 | `harness/` | Playwright harness, round loop, crop-vs-screenshot check |

@@ -8,6 +8,8 @@ cities never appear in training.
 
 ## Adding your model
 
+The spec (what to build, what not to touch) and a code template: [GUESSER_VARIANTS.md](GUESSER_VARIANTS.md).
+
 1. **Write it.** Add a class in a new module under `models/guesser/` that implements
    `core.interfaces.Guesser` (`cell_probs`, `guess`) plus `save_to(folder)` and a classmethod
    `load_from(folder)`, decorated with `@register("your_kind")`. `CellGuesser` in
