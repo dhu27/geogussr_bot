@@ -6,10 +6,11 @@
 Sweeps n_cells x l2 (configs/guesser.yaml), picks the setting with the best single-view mean
 score on **val**, and compares it with three baselines on val: the M0 placeholder
 (NearestMeanGuesser), always guessing the largest training cell, and RandomGuesser.
-The test split is never read. Writes to runs/guesser/<name>/:
+The test split is never read. Saves the chosen model as runs/models/<model-name>/ (default
+softmax_k<K>; see models/guesser/registry.py) with:
 
-    guesser.npz         the chosen model (load with CellGuesser.load; use with play.py --weights)
-    metrics.json        every model x {1 view, 8 views} x {overall, per continent}
+    model.json, guesser.npz   the model (scripts/evaluate.py --model / play.py --model <name>)
+    metrics.json       every model x {1 view, 8 views} x {overall, per continent}
     report.md           the tables below
     predictions.parquet the chosen model's val guesses (image_id, n_views, pred_lat, pred_lon)
 """
@@ -23,12 +24,13 @@ import time
 
 import numpy as np
 
-from core.config import load_config, resolve
+from core.config import load_config
 from data.dataset import load_images, load_views
 from data.hub import dataset_dir
 from models.guesser.classifier import CellGuesser, NearestMeanGuesser
 from models.guesser.evaluation import LargestCellGuesser, predict, summarize, view_matrix
 from models.guesser.random import RandomGuesser
+from models.guesser.registry import save_model
 
 COLS = ("median_km", "mean_score", "within_25km", "within_200km", "within_750km", "within_2500km")
 
@@ -63,13 +65,12 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--name", required=True, help="embedded dataset, e.g. pilot_v2_sc")
-    ap.add_argument("--out", help="default: runs/guesser/<name>")
+    ap.add_argument("--model-name", help="default: softmax_k<chosen K>")
+    ap.add_argument("--description", default="", help="one line for the leaderboard")
     ap.add_argument("--quick", action="store_true", help="one setting, no sweep (for smoke tests)")
     args = ap.parse_args()
     cfg = load_config("guesser")
     root = dataset_dir(args.name)
-    out = resolve(args.out or f"runs/guesser/{args.name}")
-    out.mkdir(parents=True, exist_ok=True)
 
     images = load_images(root, check_files=False)
     views, emb = load_views(root)
@@ -134,7 +135,13 @@ def main() -> None:
     for name, g in baselines.items():
         rows.append((name, summarize(predict(g, images, views, emb, "val"))))
 
-    best.save(out / "guesser.npz")
+    out = save_model(
+        best,
+        name=args.model_name or f"softmax_k{best_k}",
+        dataset=args.name,
+        description=args.description or f"softmax head over {best_k} geocells (l2={best_l2:g})",
+        config={"n_cells": best_k, "l2": best_l2, **common},
+    )
     best_pred.assign(source="offline")[
         ["image_id", "n_views", "pred_lat", "pred_lon", "source"]
     ].to_parquet(out / "predictions.parquet", index=False)

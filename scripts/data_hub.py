@@ -4,6 +4,10 @@ uv run python scripts/data_hub.py create          # once, by whoever sets up the
 uv run python scripts/data_hub.py list            # what's on the hub
 uv run python scripts/data_hub.py push pilot_v1   # upload datasets/pilot_v1/ (resumable)
 uv run python scripts/data_hub.py pull pilot_v1   # download into datasets/pilot_v1/
+
+uv run python scripts/data_hub.py list-models          # trained guessers on the hub
+uv run python scripts/data_hub.py push-model <name>    # upload runs/models/<name>/
+uv run python scripts/data_hub.py pull-model <name>    # download into runs/models/<name>/
 """
 
 from __future__ import annotations
@@ -24,6 +28,12 @@ def main() -> int:
     p = sub.add_parser("push", help="upload <data_root>/<name>/")
     p.add_argument("name")
     p = sub.add_parser("pull", help="download into <data_root>/<name>/")
+    p.add_argument("name")
+    p.add_argument("--force", action="store_true", help="re-download even if present")
+    sub.add_parser("list-models", help="list trained guessers on the hub")
+    p = sub.add_parser("push-model", help="upload runs/models/<name>/")
+    p.add_argument("name")
+    p = sub.add_parser("pull-model", help="download into runs/models/<name>/")
     p.add_argument("name")
     p.add_argument("--force", action="store_true", help="re-download even if present")
     args = ap.parse_args()
@@ -47,7 +57,20 @@ def main() -> int:
             hub.push(args.name)
         elif args.cmd == "pull":
             hub.pull(args.name, force=args.force)
-    except hub.HubError as e:
+        elif args.cmd == "list-models":
+            models = hub.list_models()
+            if not models:
+                print(f"no models on {hub.hub_repo()} yet")
+            for m in models:
+                print(
+                    f"{m['name']:<24} {m['kind']:<14} dataset={m['dataset']:<14} "
+                    f"by {m.get('author') or '?':<12} {m.get('description', '')}"
+                )
+        elif args.cmd == "push-model":
+            hub.push_model(args.name)
+        elif args.cmd == "pull-model":
+            hub.pull_model(args.name, force=args.force)
+    except (hub.HubError, FileNotFoundError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
     return 0

@@ -12,3 +12,7 @@ sweep:
   l2: [0.0001, 0.001, 0.01]
 
 temperature: 20.0      # NearestMeanGuesser baseline only (the M0 placeholder)
+
+# Model every evaluation is compared with (paired, scripts/evaluate.py). Pull it first:
+#   uv run python scripts/data_hub.py pull-model softmax_k256
+baseline_model: softmax_k256

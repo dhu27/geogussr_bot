@@ -10,8 +10,10 @@ Layout on the hub (one folder per dataset; a dataset name is a version and is ne
         edges.parquet                    # Phase 2, if built
         shards/images-00000.tar ...      # images/<id>.jpg packed ~1000 per tar
         MANIFEST.json                    # written LAST: its presence = dataset complete
+      _models/<model_name>/              # trained guessers (model.json + weights), also immutable
 
-Locally a dataset lives at ``dataset_dir(name)`` = <data_root>/<name>/ (see configs/data.yaml).
+Locally a dataset lives at ``dataset_dir(name)`` = <data_root>/<name>/ (see configs/data.yaml);
+a model at runs/models/<model_name>/ (models/guesser/registry.py).
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ SHARD_SIZE = 1000
 MANIFEST = "MANIFEST.json"
 DATA_FILES = ("images.parquet", "views.parquet", "embeddings.npy", "edges.parquet")
 REPO_TYPE = "dataset"
+HUB_MODELS = "_models"
 
 DATASET_CARD = """---
 license: cc-by-sa-4.0
@@ -108,6 +111,8 @@ def list_datasets() -> list[dict]:
         if not isinstance(entry, RepoFolder):  # files at the root (README.md)
             continue
         name = entry.path
+        if name == HUB_MODELS:  # trained guessers, not a dataset (see push_model)
+            continue
         if api.file_exists(repo, f"{name}/{MANIFEST}", repo_type=REPO_TYPE):
             out.append(json.loads(_read_hub_file(api, repo, f"{name}/{MANIFEST}")))
         else:
@@ -278,3 +283,72 @@ def pull(name: str, *, force: bool = False, log=print) -> Path:
         cache.parent.rmdir()
     log(f"pulled {name}: {len(images)} images -> {dest}")
     return dest
+
+
+# --- models (trained guessers) --------------------------------------------------------------
+def push_model(name: str, *, log=print) -> str:
+    """Upload runs/models/<name>/ to <hub_repo>/_models/<name>/ in one commit. Model names are
+    immutable like dataset names: refuses to overwrite (train again under a new name)."""
+    from models.guesser.registry import MODEL_JSON, find_model, load_model
+
+    folder = find_model(name)
+    load_model(folder)  # refuse to share a model that does not load
+    api, repo = _api(), hub_repo()
+    if api.file_exists(repo, f"{HUB_MODELS}/{name}/{MODEL_JSON}", repo_type=REPO_TYPE):
+        raise HubError(f"model '{name}' already exists on {repo}; models are immutable")
+    api.upload_folder(
+        repo_id=repo,
+        repo_type=REPO_TYPE,
+        folder_path=str(folder),
+        path_in_repo=f"{HUB_MODELS}/{name}",
+        commit_message=f"model {name}",
+    )
+    log(f"pushed model {name} -> {repo}/{HUB_MODELS}/{name}")
+    return name
+
+
+def pull_model(name: str, *, force: bool = False, log=print) -> Path:
+    """Download <hub_repo>/_models/<name>/ into runs/models/<name>/."""
+    from huggingface_hub import snapshot_download
+
+    from models.guesser.registry import MODEL_JSON, model_dir
+
+    dest = model_dir(name)
+    if (dest / MODEL_JSON).is_file() and not force:
+        log(f"{dest} already present (use --force to re-download)")
+        return dest
+    api, repo = _api(), hub_repo()
+    if not api.file_exists(repo, f"{HUB_MODELS}/{name}/{MODEL_JSON}", repo_type=REPO_TYPE):
+        raise HubError(f"no model '{name}' on {repo} (run `list-models`)")
+    with tempfile.TemporaryDirectory(prefix=f"model-{name}-") as tmp:
+        snapshot_download(
+            repo,
+            repo_type=REPO_TYPE,
+            allow_patterns=[f"{HUB_MODELS}/{name}/**"],
+            local_dir=tmp,
+            token=api.token,
+        )
+        if dest.exists():
+            shutil.rmtree(dest)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(Path(tmp) / HUB_MODELS / name, dest)
+    log(f"pulled model {name} -> {dest}")
+    return dest
+
+
+def list_models() -> list[dict]:
+    """model.json of every model on the hub."""
+    from huggingface_hub import RepoFolder
+
+    from models.guesser.registry import MODEL_JSON
+
+    api, repo = _api(), hub_repo()
+    if not any(e.path == HUB_MODELS for e in api.list_repo_tree(repo, repo_type=REPO_TYPE)):
+        return []  # no model pushed yet
+    out = []
+    for entry in api.list_repo_tree(repo, path_in_repo=HUB_MODELS, repo_type=REPO_TYPE):
+        if isinstance(entry, RepoFolder):
+            path = f"{entry.path}/{MODEL_JSON}"
+            if api.file_exists(repo, path, repo_type=REPO_TYPE):
+                out.append(json.loads(_read_hub_file(api, repo, path)))
+    return out

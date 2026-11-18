@@ -29,27 +29,35 @@ def view_matrix(views: pd.DataFrame, emb: np.ndarray, image_ids: list[str]) -> n
 def predict(
     guesser: Guesser, images: pd.DataFrame, views: pd.DataFrame, emb: np.ndarray, split: str
 ) -> pd.DataFrame:
-    """One row per guess: image_id, continent, n_views, pred_lat, pred_lon, distance_km."""
+    """One row per guess: image_id, continent, n_views, view, pred_lat, pred_lon, distance_km.
+
+    ``view`` is the heading index (0-7) for single-view guesses and -1 for the combined guess,
+    so (image_id, n_views, view) identifies the same guess across models (paired comparison).
+    """
     panos = images[(images["split"] == split) & images["is_pano"]].reset_index(drop=True)
     x = view_matrix(views, emb, panos["image_id"].tolist())
     rows = []
     for p, img in enumerate(panos.itertuples()):
-        settings = [(1, x[p, h : h + 1]) for h in range(N_HEADINGS)] + [(N_HEADINGS, x[p])]
-        for n_views, embs in settings:
+        settings = [(1, h, x[p, h : h + 1]) for h in range(N_HEADINGS)] + [(N_HEADINGS, -1, x[p])]
+        for n_views, view, embs in settings:
             lat, lon = guesser.guess(guesser.cell_probs(embs))
             rows.append(
                 (
                     img.image_id,
                     img.continent,
                     n_views,
+                    view,
                     lat,
                     lon,
                     haversine_km(lat, lon, img.lat, img.lon),
                 )
             )
     return pd.DataFrame(
-        rows, columns=["image_id", "continent", "n_views", "pred_lat", "pred_lon", "distance_km"]
-    )
+        rows,
+        columns=[
+            "image_id", "continent", "n_views", "view", "pred_lat", "pred_lon", "distance_km"
+        ],
+    )  # fmt: skip
 
 
 def summarize(pred: pd.DataFrame) -> dict[str, dict]:
