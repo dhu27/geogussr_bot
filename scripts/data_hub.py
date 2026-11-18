@@ -4,6 +4,7 @@ uv run python scripts/data_hub.py create          # once, by whoever sets up the
 uv run python scripts/data_hub.py list            # what's on the hub
 uv run python scripts/data_hub.py push pilot_v1   # upload datasets/pilot_v1/ (resumable)
 uv run python scripts/data_hub.py pull pilot_v1   # download into datasets/pilot_v1/
+uv run python scripts/data_hub.py pull world_v1_sc --tables-only   # embeddings only, no images
 
 uv run python scripts/data_hub.py list-models          # trained guessers on the hub
 uv run python scripts/data_hub.py push-model <name>    # upload runs/models/<name>/
@@ -30,6 +31,11 @@ def main() -> int:
     p = sub.add_parser("pull", help="download into <data_root>/<name>/")
     p.add_argument("name")
     p.add_argument("--force", action="store_true", help="re-download even if present")
+    p.add_argument(
+        "--tables-only",
+        action="store_true",
+        help="only images.parquet + embeddings, no images (enough to train/evaluate guessers)",
+    )
     sub.add_parser("list-models", help="list trained guessers on the hub")
     p = sub.add_parser("push-model", help="upload runs/models/<name>/")
     p.add_argument("name")
@@ -56,7 +62,7 @@ def main() -> int:
         elif args.cmd == "push":
             hub.push(args.name)
         elif args.cmd == "pull":
-            hub.pull(args.name, force=args.force)
+            hub.pull(args.name, force=args.force, tables_only=args.tables_only)
         elif args.cmd == "list-models":
             models = hub.list_models()
             if not models:

@@ -18,6 +18,7 @@ a model at runs/models/<model_name>/ (models/guesser/registry.py).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -84,6 +85,21 @@ def _api():
     from huggingface_hub import HfApi
 
     return HfApi(token=os.environ.get("HF_TOKEN") or None)  # None -> `hf auth login` token
+
+
+@contextlib.contextmanager
+def _plain_downloads():
+    """Download over plain HTTPS instead of HF's Xet transfer. On some connections Xet stalls for
+    many minutes and then fails ("CAS Client Error"), where plain HTTPS fetched the same 377 MB
+    file in seconds (Nov 2026). Uploads are unaffected."""
+    from huggingface_hub import constants
+
+    old = constants.HF_HUB_DISABLE_XET
+    constants.HF_HUB_DISABLE_XET = True
+    try:
+        yield
+    finally:
+        constants.HF_HUB_DISABLE_XET = old
 
 
 def create_repo() -> str:
@@ -238,8 +254,12 @@ def push(name: str, *, log=print) -> dict:
     return manifest
 
 
-def pull(name: str, *, force: bool = False, log=print) -> Path:
-    """Download ``name`` into ``dataset_dir(name)`` and verify it."""
+def pull(name: str, *, force: bool = False, tables_only: bool = False, log=print) -> Path:
+    """Download ``name`` into ``dataset_dir(name)`` and verify it.
+
+    ``tables_only``: just images.parquet, views.parquet and embeddings.npy, no image shards.
+    Enough to train and evaluate guessers (~400 MB instead of ~3 GB for world_v1_sc); the game
+    and harness need the images (a full pull later fetches them)."""
     from huggingface_hub import snapshot_download
 
     dest = dataset_dir(name)
@@ -249,17 +269,20 @@ def pull(name: str, *, force: bool = False, log=print) -> Path:
     api, repo = _api(), hub_repo()
     if not api.file_exists(repo, f"{name}/{MANIFEST}", repo_type=REPO_TYPE):
         raise HubError(f"'{name}' is not a complete dataset on {repo} (run `list`)")
+    if tables_only:
+        return _pull_tables(name, dest, api, repo, log)
 
     # Per-dataset download area: kept if the pull is interrupted (re-running resumes),
     # removed once the dataset is extracted and verified.
     cache = data_root() / "_hub_download" / name
-    snapshot_download(
-        repo,
-        repo_type=REPO_TYPE,
-        allow_patterns=[f"{name}/*", f"{name}/**"],
-        local_dir=cache,
-        token=api.token,
-    )
+    with _plain_downloads():
+        snapshot_download(
+            repo,
+            repo_type=REPO_TYPE,
+            allow_patterns=[f"{name}/*", f"{name}/**"],
+            local_dir=cache,
+            token=api.token,
+        )
     src = cache / name
     dest.mkdir(parents=True, exist_ok=True)
     shards = sorted((src / "shards").glob("*.tar"))
@@ -282,6 +305,37 @@ def pull(name: str, *, force: bool = False, log=print) -> Path:
     if not any(cache.parent.iterdir()):
         cache.parent.rmdir()
     log(f"pulled {name}: {len(images)} images -> {dest}")
+    return dest
+
+
+def _pull_tables(name: str, dest: Path, api, repo: str, log) -> Path:
+    """The dataset's tables without its images. Writes no MANIFEST.json, so a later full pull
+    still runs (MANIFEST.json marks a complete local copy)."""
+    from huggingface_hub import hf_hub_download
+
+    manifest = json.loads(_read_hub_file(api, repo, f"{name}/{MANIFEST}"))
+    dest.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=f"tables-{name}-") as tmp:
+        for f in manifest["files"]:
+            for attempt in range(3):
+                try:
+                    with _plain_downloads():
+                        p = hf_hub_download(
+                            repo, f"{name}/{f}", repo_type=REPO_TYPE, token=api.token,
+                            local_dir=tmp,
+                        )  # fmt: skip
+                    break
+                except Exception as e:  # network errors surface as several exception types
+                    if attempt == 2:
+                        raise HubError(f"could not download {name}/{f}: {e}") from e
+                    log(f"  {f}: {type(e).__name__}, retrying")
+                    time.sleep(5 * (attempt + 1))
+            shutil.move(p, dest / f)
+            log(f"  {f}")
+    images = load_images(dest, check_files=False)
+    if len(images) != manifest["n_images"]:
+        raise HubError(f"pulled {len(images)} rows, manifest says {manifest['n_images']}")
+    log(f"pulled {name} tables ({', '.join(manifest['files'])}) -> {dest}; no images")
     return dest
 
 
@@ -321,13 +375,14 @@ def pull_model(name: str, *, force: bool = False, log=print) -> Path:
     if not api.file_exists(repo, f"{HUB_MODELS}/{name}/{MODEL_JSON}", repo_type=REPO_TYPE):
         raise HubError(f"no model '{name}' on {repo} (run `list-models`)")
     with tempfile.TemporaryDirectory(prefix=f"model-{name}-") as tmp:
-        snapshot_download(
-            repo,
-            repo_type=REPO_TYPE,
-            allow_patterns=[f"{HUB_MODELS}/{name}/**"],
-            local_dir=tmp,
-            token=api.token,
-        )
+        with _plain_downloads():
+            snapshot_download(
+                repo,
+                repo_type=REPO_TYPE,
+                allow_patterns=[f"{HUB_MODELS}/{name}/**"],
+                local_dir=tmp,
+                token=api.token,
+            )
         if dest.exists():
             shutil.rmtree(dest)
         dest.parent.mkdir(parents=True, exist_ok=True)

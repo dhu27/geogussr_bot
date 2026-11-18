@@ -12,8 +12,10 @@ cities never appear in training.
    `core.interfaces.Guesser` (`cell_probs`, `guess`) plus `save_to(folder)` and a classmethod
    `load_from(folder)`, decorated with `@register("your_kind")`. `CellGuesser` in
    `models/guesser/classifier.py` is a working example.
-2. **Train on train, tune on val.** Never pick settings by looking at test. Save the final model
-   with `models.guesser.registry.save_model(guesser, name="your_model", dataset="world_v1_sc",
+2. **Train on train, tune on val.** Training needs only the embeddings (~400 MB, no images):
+   `uv run python scripts/data_hub.py pull world_v1_sc --tables-only`. Never pick settings by
+   looking at test. Save the final model with
+   `models.guesser.registry.save_model(guesser, name="your_model", dataset="world_v1_sc",
    description="one line")`. It lands in `runs/models/your_model/`.
 3. **Evaluate on val:**
    ```bash
