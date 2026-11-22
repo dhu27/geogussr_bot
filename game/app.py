@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import uuid
+import webbrowser
 from pathlib import Path
 
 import numpy as np
@@ -16,13 +17,20 @@ from core import game_api
 from core.config import load_config, resolve
 from core.scoring import haversine_km, score
 from core.view_spec import HEADINGS_DEG
-from data.dataset import load_images
+from data.dataset import load_images, load_views
+from models.guesser.evaluation import view_matrix
+from models.guesser.random import RandomGuesser
+from models.guesser.registry import load_model
 
 STATIC = Path(__file__).parent / "static"
 
 
 def create_app(
-    dataset: str | Path, splits: list[str] | None = None, seed: int | None = None
+    dataset: str | Path,
+    splits: list[str] | None = None,
+    seed: int | None = None,
+    bot_guesser=None,
+    bot_requires_embeddings: bool = False,
 ) -> Flask:
     # Absolute: send_from_directory resolves a relative path against this package, not the CWD,
     # so create_app("datasets/x") used to 404 on every panorama.
@@ -34,6 +42,15 @@ def create_app(
     if images.empty:
         raise ValueError(f"no panoramas in {root} for splits {splits}")
     images = images.set_index("image_id")
+    bot_views = None
+    bot_embeddings = None
+    if bot_guesser is not None and bot_requires_embeddings:
+        try:
+            bot_views, bot_embeddings = load_views(root)
+        except FileNotFoundError as error:
+            raise ValueError(
+                f"--model requires views.parquet and embeddings.npy in {root}"
+            ) from error
     rng = np.random.default_rng(seed)
     rounds: dict[str, dict] = {}
 
@@ -87,6 +104,34 @@ def create_app(
         }
         return jsonify(body)
 
+    @app.get(game_api.BOT_GUESS.replace("{round_id}", "<round_id>"))
+    def bot_guess(round_id: str):
+        rnd = rounds.get(round_id)
+        if rnd is None:
+            abort(404)
+        if bot_guesser is None:
+            return jsonify({"enabled": False})
+        if "bot_result" not in rnd:
+            image_id = rnd["image_id"]
+            if bot_views is not None and bot_embeddings is not None:
+                x = view_matrix(bot_views, bot_embeddings, [image_id])
+                probs = bot_guesser.cell_probs(x[0])
+            else:
+                probs = bot_guesser.cell_probs(np.empty((1, 768), dtype=np.float32))
+            lat, lon = bot_guesser.guess(probs)
+            row = images.loc[image_id]
+            d = haversine_km(lat, lon, row["lat"], row["lon"])
+            rnd["bot_result"] = {
+                "enabled": True,
+                "lat": float(lat),
+                "lon": float(lon),
+                "distance_km": d,
+                "score": score(d),
+                "true_lat": float(row["lat"]),
+                "true_lon": float(row["lon"]),
+            }
+        return jsonify(rnd["bot_result"])
+
     return app
 
 
@@ -100,13 +145,39 @@ def main() -> None:
         default=None,
         help="comma-separated dataset splits to serve (default: configs/game.yaml)",
     )
+    ap.add_argument(
+        "--model",
+        default=None,
+        help="saved model name or folder for the presentation bot (e.g. softmax_k256)",
+    )
+    ap.add_argument("--open", action="store_true", help="open the game in the default browser")
     args = ap.parse_args()
     splits = (
         [split.strip() for split in args.splits.split(",") if split.strip()]
         if args.splits is not None
         else cfg.get("splits")
     )
-    app = create_app(resolve(args.dataset), splits, cfg.get("seed"))
+    root = resolve(args.dataset)
+    if args.model:
+        bot_guesser = load_model(args.model)
+        bot_requires_embeddings = True
+    else:
+        images = load_images(root)
+        training = images[images["split"] == "train"]
+        if training.empty:
+            training = images
+        locations = training[["lat", "lon"]].to_numpy()
+        bot_guesser = RandomGuesser(locations, seed=cfg.get("seed") or 0)
+        bot_requires_embeddings = False
+    app = create_app(
+        root,
+        splits,
+        cfg.get("seed"),
+        bot_guesser,
+        bot_requires_embeddings=bot_requires_embeddings,
+    )
+    if args.open:
+        webbrowser.open(f"http://{cfg['host']}:{args.port}/")
     app.run(host=cfg["host"], port=args.port)
 
 

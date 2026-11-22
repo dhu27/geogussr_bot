@@ -58,6 +58,48 @@ def test_page_has_contract_elements(client):
     ):
         assert f'id="{sel[1:]}"' in html
     assert "Mapillary" in html and "CC BY-SA" in html  # ground rule 4
+    assert 'id="bot-map"' in html
+    assert 'id="bot-pano"' in html
+    assert 'id="start-game"' in html
+    assert 'id="player-score"' in html
+    assert 'id="bot-score"' in html
+    assert 'id="win-screen"' in html
+    assert 'id="play-again"' in html
+    assert 'id="name-screen"' in html
+    assert 'id="player-name"' in html
+
+
+def test_bot_guess_endpoint(fixture_images):
+    class FixedGuesser:
+        def cell_probs(self, view_embs):
+            return view_embs
+
+        def guess(self, probs):
+            return (10.0, 20.0)
+
+    app = create_app(FIXTURES_DIR, seed=0, bot_guesser=FixedGuesser())
+    client = app.test_client()
+    r = client.get(game_api.NEW_ROUND).get_json()
+    res = client.get(game_api.BOT_GUESS.format(round_id=r["round_id"]))
+    assert res.status_code == 200
+    bot = res.get_json()
+    assert bot["enabled"] is True
+    assert set(bot) == {"enabled", "lat", "lon", "distance_km", "score", "true_lat", "true_lon"}
+
+
+def test_random_bot_is_the_default_style(fixture_images):
+    from models.guesser.random import RandomGuesser
+
+    locations = fixture_images[["lat", "lon"]].to_numpy()
+    app = create_app(
+        FIXTURES_DIR,
+        seed=0,
+        bot_guesser=RandomGuesser(locations, seed=0),
+    )
+    client = app.test_client()
+    r = client.get(game_api.NEW_ROUND).get_json()
+    bot = client.get(game_api.BOT_GUESS.format(round_id=r["round_id"])).get_json()
+    assert bot["enabled"] is True
 
 
 def test_relative_dataset_path_serves_panoramas(monkeypatch):

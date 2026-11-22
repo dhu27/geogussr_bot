@@ -9,30 +9,85 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <main>
-    <section class="look">
-      <!-- #pano renders exactly the view spec (core/view_spec.py): 336x336, hfov 90, pitch 0.
-           The harness screenshots only this element. Keep every other UI element outside it. -->
-      <div id="pano"></div>
-      <div class="turns">
-        <button id="turn-left" title="Turn left 45° (Q)">⟲ 45°</button>
-        <span id="heading-label"></span>
-        <button id="turn-right" title="Turn right 45° (E)">45° ⟳</button>
+  <main id="game">
+    <header class="game-header is-ready">
+      <div class="scoreboard">
+        <div class="score score-player">
+          <span class="score-name">Player</span>
+          <strong id="player-score">0</strong>
+          <span class="score-unit">points</span>
+        </div>
+        <div class="race-status">
+          <div id="round-label">Ready</div>
+          <div id="grace-timer" aria-live="polite"></div>
+        </div>
+        <div class="score score-bot">
+          <span class="score-name">Bot</span>
+          <strong id="bot-score">0</strong>
+          <span class="score-unit">points</span>
+        </div>
       </div>
+      <button id="start-game" class="primary-action">Start game</button>
+    </header>
+
+    <section class="arena">
+      <section class="competitor player-panel">
+        <div class="competitor-title">
+          <h2>Player</h2>
+        </div>
+        <div id="pano"></div>
+        <div class="turns">
+          <button id="turn-left" title="Turn left 45° (Q)">⟲ 45°</button>
+          <span id="heading-label" class="heading">Waiting</span>
+          <button id="turn-right" title="Turn right 45° (E)">45° ⟳</button>
+        </div>
+        <div id="map"></div>
+        <div class="guess-actions">
+          <button id="submit" disabled>Guess</button>
+          <span id="result"></span>
+        </div>
+      </section>
+
+      <section class="competitor bot-panel">
+        <div class="competitor-title">
+          <h2>Bot</h2>
+        </div>
+        <div id="bot-pano"></div>
+        <div class="bot-status"><span id="bot-heading-label" class="heading">Waiting</span></div>
+        <div id="bot-map"></div>
+        <div id="bot-result" class="guess-actions bot-result">Waiting</div>
+      </section>
     </section>
-    <section class="guess">
-      <div id="map"></div>
-      <div class="actions">
-        <button id="submit" disabled>Guess</button>
-        <button id="next-round" hidden>Next round</button>
-        <span id="result"></span>
-      </div>
-      <div id="round-label" aria-live="polite"></div>
-      <div id="score-label" aria-live="polite"></div>
+
+    <div class="round-footer">
+      <button id="next-round" hidden>Next round</button>
       <div id="summary" hidden aria-live="polite"></div>
       <div id="attribution" hidden></div>
-    </section>
+    </div>
   </main>
+  <div id="name-screen" class="name-screen" hidden>
+    <form id="name-form" class="name-card">
+      <h2>Enter player name</h2>
+      <input id="player-name" name="playerName" maxlength="24" autocomplete="nickname" required
+        placeholder="Player name" aria-label="Player name">
+      <button type="submit" class="primary-action">Start 5 rounds</button>
+    </form>
+  </div>
+  <div id="win-screen" class="win-screen" hidden>
+    <div class="win-card">
+      <div id="winner-label" class="winner-label"></div>
+      <div class="final-scores">
+        <div><span id="final-player-name">Player</span><strong id="final-player-score">0</strong><small>points</small></div>
+        <div><span>Bot</span><strong id="final-bot-score">0</strong><small>points</small></div>
+      </div>
+      <h3>Leaderboard</h3>
+      <table class="leaderboard">
+        <thead><tr><th>Rank</th><th>Player</th><th>Score</th></tr></thead>
+        <tbody id="leaderboard-body"></tbody>
+      </table>
+      <button id="play-again" class="primary-action">New player / play again</button>
+    </div>
+  </div>
   <footer>
     Street-level imagery © <a href="https://www.mapillary.com" target="_blank" rel="noopener">Mapillary</a>
     contributors, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>.

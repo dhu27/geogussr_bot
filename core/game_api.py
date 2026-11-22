@@ -7,6 +7,7 @@ from typing import TypedDict
 # --- HTTP ---------------------------------------------------------------------------------
 NEW_ROUND = "/api/round/new"  # GET
 GUESS = "/api/round/{round_id}/guess"  # POST {lat, lon}
+BOT_GUESS = "/api/round/{round_id}/bot"  # GET
 NEIGHBORS = "/api/node/{node_id}/neighbors"  # GET, Phase 2
 
 
