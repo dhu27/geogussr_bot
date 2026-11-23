@@ -18,9 +18,17 @@ def _wait_phase(page, phase, timeout_ms=15000):
 
 def _play_round(page):
     _wait_phase(page, "searching")  # round open: map clicks and Guess work, bot is searching
+    total_before = page.evaluate("window.__game.total_score")
     page.click("#map", position={"x": 200, "y": 150})
     page.click("#submit")
+    # The player locked in before the bot finished turning: nothing about the answer is shown yet.
+    page.wait_for_function("document.querySelector('#result').textContent === 'Guess locked in'")
+    assert not page.evaluate("window.__game.bot_done")
+    assert page.evaluate("window.__game.total_score") == total_before
     page.wait_for_selector("#next-round:not([hidden])", timeout=20000)
+    # Both locked in: both answers and scores are revealed together.
+    assert " km · " in page.inner_text("#result")
+    assert " km · " in page.inner_text("#bot-result")
 
 
 def test_demo_plays_all_rounds_and_again(fixture_images):
