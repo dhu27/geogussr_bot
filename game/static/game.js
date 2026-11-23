@@ -198,10 +198,12 @@
     else finishRound();
   }
 
-  async function runBotSearch() {
+  async function runBotSearch(roundId) {
+    // Stops if the round it was started for is over, so it never acts on a later round.
+    const stale = () => state.bot_done || state.round_id !== roundId;
     if (botViewer) {
       for (let i = 1; i <= 8; i++) {
-        if (state.bot_done) return;
+        if (stale()) return;
         botHeading = wrap(round.heading + i * STEP);
         const yaw = ((botHeading - round.north_offset + 540) % 360) - 180;
         botViewer.setYaw(yaw, 250);
@@ -209,6 +211,7 @@
         await sleep(BOT_TURN_MS);
       }
     }
+    if (state.round_id !== roundId) return;
     await finishBot(false);
   }
 
@@ -371,7 +374,14 @@
     loadPano();
     loadBotPano();
     if (DEMO) {
+      // Every round (not just the first) opens for the player and starts the bot.
       state.phase = "loading";
+      const roundId = round.round_id;
+      setTimeout(() => {
+        if (state.round_id !== roundId || state.phase !== "loading") return;
+        state.phase = "searching";
+        runBotSearch(roundId);
+      }, 800);
     } else {
       state.phase = "looking";
       botViewer = null;
@@ -396,12 +406,6 @@
     document.querySelector(".competitor.player-panel h2").textContent = state.player_name;
     $("#start-game").hidden = true;
     newRound();
-    setTimeout(() => {
-      if (DEMO) {
-        state.phase = "searching";
-        runBotSearch();
-      }
-    }, 800);
   }
 
   function playAgain() {
