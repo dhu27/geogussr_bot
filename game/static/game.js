@@ -166,42 +166,69 @@
         botRequest = fetch(`/api/round/${round.round_id}/bot`).then((res) => res.json());
       }
       state.bot_result = await botRequest;
-      if (!state.bot_result.enabled) {
-        $("#bot-result").textContent = "No bot model loaded";
-      } else {
-        botGuessMarker = L.circleMarker([state.bot_result.lat, state.bot_result.lon], {
-          radius: 7, color: "#dc2626", weight: 3,
-        }).addTo(botLayer);
-        $("#bot-result").textContent =
-          `${state.bot_result.distance_km.toFixed(1)} km · ${Math.round(state.bot_result.score)} pts`;
-        state.bot_total_score += state.bot_result.score;
-        const botTruth = [state.bot_result.true_lat, state.bot_result.true_lon];
-        L.circleMarker(botTruth, { radius: 7, color: "#16a34a", weight: 3 }).addTo(botLayer);
-        L.polyline([[state.bot_result.lat, state.bot_result.lon], botTruth], {
-          color: "#6b6b66", dashArray: "4 6",
-        }).addTo(botLayer);
-        botMap.fitBounds(
-          L.latLngBounds([[state.bot_result.lat, state.bot_result.lon], botTruth]).pad(0.3),
-          { maxZoom: 8 },
-        );
-        state.bot_rounds.push({
-          round: state.round_number,
-          distance_km: state.bot_result.distance_km,
-          score: state.bot_result.score,
-        });
-      }
+      // Locked in, but nothing about the answer is shown until both players are done.
+      $("#bot-result").textContent =
+        state.bot_result.enabled ? "Bot has locked in its guess" : "No bot model loaded";
     } catch (_error) {
+      state.bot_result = null;
       $("#bot-result").textContent = "Bot unavailable";
     }
-    showRoundProgress();
     if (!state.human_done) startGrace("human");
-    else finishRound();
+    else revealRound();
   }
 
-  async function runBotSearch() {
+  // Draw the bot's guess, the true location and its score (demo: only once both are locked).
+  function showBotResult() {
+    const r = state.bot_result;
+    if (!r || !r.enabled) return;
+    botGuessMarker = L.circleMarker([r.lat, r.lon], {
+      radius: 7, color: "#dc2626", weight: 3,
+    }).addTo(botLayer);
+    $("#bot-result").textContent = `${r.distance_km.toFixed(1)} km · ${Math.round(r.score)} pts`;
+    state.bot_total_score += r.score;
+    const botTruth = [r.true_lat, r.true_lon];
+    L.circleMarker(botTruth, { radius: 7, color: "#16a34a", weight: 3 }).addTo(botLayer);
+    L.polyline([[r.lat, r.lon], botTruth], { color: "#6b6b66", dashArray: "4 6" }).addTo(botLayer);
+    botMap.fitBounds(L.latLngBounds([[r.lat, r.lon], botTruth]).pad(0.3), { maxZoom: 8 });
+    state.bot_rounds.push({ round: state.round_number, distance_km: r.distance_km, score: r.score });
+  }
+
+  // Draw the player's guess, the true location and their score.
+  function showHumanResult() {
+    const r = state.result;
+    const chosen = state.human_guess;
+    const truth = [r.true_lat, r.true_lon];
+    L.circleMarker([chosen.lat, chosen.lon], { radius: 7, color: "#2563eb", weight: 3 }).addTo(layer);
+    L.circleMarker(truth, { radius: 7, color: "#16a34a", weight: 3 }).addTo(layer);
+    L.polyline([[chosen.lat, chosen.lon], truth], { color: "#6b6b66", dashArray: "4 6" }).addTo(layer);
+    map.fitBounds(L.latLngBounds([[chosen.lat, chosen.lon], truth]).pad(0.3), { maxZoom: 8 });
+    $("#result").textContent =
+      `${state.human_forced ? "Timeout: " : ""}${r.distance_km.toFixed(1)} km · ${Math.round(r.score)} pts`;
+    state.total_score += r.score;
+    state.player_rounds.push({ round: state.round_number, distance_km: r.distance_km, score: r.score });
+    $("#attribution").hidden = false;
+    const imageId = round.pano_url.split("/").pop().replace(/\.jpg$/, "");
+    $("#attribution").innerHTML =
+      `Imagery: <a href="https://www.mapillary.com/app/?pKey=${encodeURIComponent(imageId)}" ` +
+      'target="_blank" rel="noopener">View on Mapillary</a>';
+  }
+
+  // Both players have locked in: reveal both answers and scores together.
+  function revealRound() {
+    if (state.phase === "guessed" || !state.human_done || !state.bot_done) return;
+    clearGraceTimer();
+    showHumanResult();
+    showBotResult();
+    showRoundProgress();
+    finishRound();
+  }
+
+  async function runBotSearch(roundId) {
+    // Stops if the round it was started for is over, so it never acts on a later round.
+    const stale = () => state.bot_done || state.round_id !== roundId;
     if (botViewer) {
       for (let i = 1; i <= 8; i++) {
-        if (state.bot_done) return;
+        if (stale()) return;
         botHeading = wrap(round.heading + i * STEP);
         const yaw = ((botHeading - round.north_offset + 540) % 360) - 180;
         botViewer.setYaw(yaw, 250);
@@ -209,6 +236,7 @@
         await sleep(BOT_TURN_MS);
       }
     }
+    if (state.round_id !== roundId) return;
     await finishBot(false);
   }
 
@@ -235,34 +263,18 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(chosen),
     });
-    const r = await res.json();
-    const truth = [r.true_lat, r.true_lon];
-    L.circleMarker([chosen.lat, chosen.lon], {
-      radius: 7, color: "#2563eb", weight: 3,
-    }).addTo(layer);
-    L.circleMarker(truth, { radius: 7, color: "#16a34a", weight: 3 }).addTo(layer);
-    L.polyline([[chosen.lat, chosen.lon], truth], { color: "#6b6b66", dashArray: "4 6" }).addTo(layer);
-    map.fitBounds(L.latLngBounds([[chosen.lat, chosen.lon], truth]).pad(0.3), { maxZoom: 8 });
-    $("#result").textContent =
-      `${forced ? "Timeout: " : ""}${r.distance_km.toFixed(1)} km · ${Math.round(r.score)} pts`;
-    state.total_score += r.score;
-    state.result = r;
-    state.player_rounds.push({
-      round: state.round_number,
-      distance_km: r.distance_km,
-      score: r.score,
-    });
-    showRoundProgress();
-    $("#attribution").hidden = false;
-    const imageId = round.pano_url.split("/").pop().replace(/\.jpg$/, "");
-    $("#attribution").innerHTML =
-      `Imagery: <a href="https://www.mapillary.com/app/?pKey=${encodeURIComponent(imageId)}" ` +
-      'target="_blank" rel="noopener">View on Mapillary</a>';
+    state.result = await res.json();
+    state.human_guess = chosen;
+    state.human_forced = forced;
     if (DEMO) {
+      // Locked in; the answer is revealed once the bot has locked in too.
+      $("#result").textContent = forced ? "Time's up: guess locked" : "Guess locked in";
       if (graceTimer) clearGraceTimer();
       if (!state.bot_done) startGrace("bot");
-      else finishRound();
+      else revealRound();
     } else {
+      showHumanResult();
+      showRoundProgress();
       finishRound();
     }
   }
@@ -371,7 +383,14 @@
     loadPano();
     loadBotPano();
     if (DEMO) {
+      // Every round (not just the first) opens for the player and starts the bot.
       state.phase = "loading";
+      const roundId = round.round_id;
+      setTimeout(() => {
+        if (state.round_id !== roundId || state.phase !== "loading") return;
+        state.phase = "searching";
+        runBotSearch(roundId);
+      }, 800);
     } else {
       state.phase = "looking";
       botViewer = null;
@@ -396,12 +415,6 @@
     document.querySelector(".competitor.player-panel h2").textContent = state.player_name;
     $("#start-game").hidden = true;
     newRound();
-    setTimeout(() => {
-      if (DEMO) {
-        state.phase = "searching";
-        runBotSearch();
-      }
-    }, 800);
   }
 
   function playAgain() {
