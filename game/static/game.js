@@ -8,6 +8,8 @@
   const GRACE_SECONDS = 30;
   const BOT_TURN_MS = 650;
   const LEADERBOARD_KEY = "geogussr_bot_leaderboard";
+  const DEMO = new URLSearchParams(window.location.search).get("demo") === "1";
+  document.documentElement.classList.toggle("demo", DEMO);
   const $ = (sel) => document.querySelector(sel);
   const wrap = (a) => ((a % 360) + 360) % 360;
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -42,7 +44,7 @@
   let botGuessMarker = null;
 
   map.on("click", (e) => {
-    if (state.phase !== "searching") return;
+    if (!["looking", "searching"].includes(state.phase)) return;
     const ll = e.latlng.wrap();
     state.guess = { lat: ll.lat, lon: ll.lng };
     if (guessMarker) guessMarker.setLatLng(e.latlng);
@@ -78,7 +80,7 @@
   }
 
   function turn(dir) {
-    if (!viewer || state.phase !== "searching") return;
+    if (!viewer || !["looking", "searching"].includes(state.phase)) return;
     const snapped = Math.round(state.heading / STEP) * STEP;
     setHeading(snapped + dir * STEP, true);
   }
@@ -96,6 +98,7 @@
     viewer.on("load", () => {
       state.heading = wrap(round.heading);
       showHeading();
+      if (!DEMO) state.phase = "looking";
       markReady();
     });
     viewer.on("mouseup", () => {
@@ -218,7 +221,11 @@
   }
 
   async function submitHuman(guess, forced = false) {
-    if (state.human_done || state.phase !== "searching" || (!guess && !state.guess)) return;
+    if (
+      state.human_done ||
+      !["looking", "searching"].includes(state.phase) ||
+      (!guess && !state.guess)
+    ) return;
     state.human_done = true;
     state.phase = "submitting";
     $("#submit").disabled = true;
@@ -251,9 +258,13 @@
     $("#attribution").innerHTML =
       `Imagery: <a href="https://www.mapillary.com/app/?pKey=${encodeURIComponent(imageId)}" ` +
       'target="_blank" rel="noopener">View on Mapillary</a>';
-    if (graceTimer) clearGraceTimer();
-    if (!state.bot_done) startGrace("bot");
-    else finishRound();
+    if (DEMO) {
+      if (graceTimer) clearGraceTimer();
+      if (!state.bot_done) startGrace("bot");
+      else finishRound();
+    } else {
+      finishRound();
+    }
   }
 
   function submit() {
@@ -321,7 +332,15 @@
 
   async function newRound() {
     if (state.round_number >= TOTAL_ROUNDS) {
-      showWinScreen();
+      if (DEMO) {
+        showWinScreen();
+      } else {
+        state.phase = "finished";
+        $("#next-round").hidden = true;
+        $("#summary").hidden = false;
+        $("#summary").textContent =
+          `Game complete — ${Math.round(state.total_score)} points`;
+      }
       return;
     }
     clearGraceTimer();
@@ -351,10 +370,15 @@
     botRequest = null;
     loadPano();
     loadBotPano();
-    setTimeout(() => {
-      state.phase = "searching";
-      runBotSearch();
-    }, 800);
+    if (DEMO) {
+      state.phase = "loading";
+    } else {
+      state.phase = "looking";
+      botViewer = null;
+      if (state.round_number === 1) {
+        botRequest = Promise.resolve({ enabled: false });
+      }
+    }
   }
 
   function startGame() {
@@ -372,6 +396,12 @@
     document.querySelector(".competitor.player-panel h2").textContent = state.player_name;
     $("#start-game").hidden = true;
     newRound();
+    setTimeout(() => {
+      if (DEMO) {
+        state.phase = "searching";
+        runBotSearch();
+      }
+    }, 800);
   }
 
   function playAgain() {
@@ -415,4 +445,6 @@
     if (e.key === "q") turn(-1);
     else if (e.key === "e") turn(1);
   });
+
+  if (!DEMO) newRound();
 })();

@@ -177,7 +177,7 @@ def main() -> None:
         bot_requires_embeddings=bot_requires_embeddings,
     )
     if args.open:
-        webbrowser.open(f"http://{cfg['host']}:{args.port}/")
+        webbrowser.open(f"http://{cfg['host']}:{args.port}/?demo=1")
     app.run(host=cfg["host"], port=args.port)
 
 
