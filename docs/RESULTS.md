@@ -47,12 +47,16 @@ and 8 views (all combined), and the 8-view mean score difference from the baseli
 |---|---|---|---|---|---|---|---|---|
 | `softmax_k256` | dhu27 | val | 1156 | 2286 | 1089 | 2422 | (baseline) | Softmax head over 256 geocells (l2=0.01); M2 baseline |
 | `nearest_mean_k256` | dhu27 | val | 2295 | 1492 | 1346 | 1982 | -440 (-621 to -252) | M0 placeholder: cosine to each cell mean (256 cells) |
+| `mlp_head_daniel_v2` | dhu27 | val | 1157 | 2243 | 1087 | 2410 | -12 (-53 to +31) | MLP head (768 -> 1024 -> 256 geocells), country aux weight 0.5, calibrated T=1.0 |
+| `knn_daniel_v1` | dhu27 | val | 1156 | 2261 | 1091 | 2371 | -51 (-97 to -4) | Nearest neighbours: top 1000 train views by cosine, weight exp(sim/0.05), 0.1 prior mix, 256 geocells |
 
 ### Test (final numbers, once per model)
 
 | model | by | split | 1 view: median km | 1 view: score | 8 views: median km | 8 views: score | vs baseline, 8 views (95% CI) | description |
 |---|---|---|---|---|---|---|---|---|
 | `softmax_k256` | dhu27 | test | 786 | 2617 | 587 | 2812 | (baseline) | Softmax head over 256 geocells (l2=0.01); M2 baseline |
+| `mlp_head_daniel_v2` | dhu27 | test | 797 | 2574 | 667 | 2746 | -65 (-154 to +24) | MLP head (768 -> 1024 -> 256 geocells), country aux weight 0.5, calibrated T=1.0 |
+| `knn_daniel_v1` | dhu27 | test | 808 | 2557 | 663 | 2723 | -88 (-277 to +77) | Nearest neighbours: top 1000 train views by cosine, weight exp(sim/0.05), 0.1 prior mix, 256 geocells |
 
 ## Notes
 
@@ -60,5 +64,10 @@ and 8 views (all combined), and the 8-view mean score difference from the baseli
   error by 25% on test (95% CI 0.3% to 38%) and 6% on val (−0.2% to 20%). Both intervals include
   the suggested 15% threshold, so it's inconclusive. The mean score gain is clearly positive in
   both (+194 test, +137 val). Each report shows this gain for its own model.
+- **MLP head and nearest neighbours (dhu27): no gain over the softmax.**
+  - **MLP:** one hidden layer. Heavy regularisation helped (5 epochs, dropout 0.5, label smoothing 0.1).
+  - **Two additions that did nothing:** a country head as a second training target (+2 points on val), and temperature calibration (T = 1 was already best for both the MLP and the softmax).
+  - **Nearest neighbours:** kNN over all 207k training views is close on single views but combines views slightly worse.
+  - Every variant lands at the softmax's level on val and test (all test intervals include 0), which suggests the limit is training diversity (number of cities), not the head.
 - **Weak spots:** Africa and Oceania, where val and test have only 3 cities each and training
   data is thin (Europe is about 46% of regions).
